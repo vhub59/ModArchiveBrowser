@@ -90,19 +90,17 @@ namespace ModArchiveBrowser.Utils
         }
 
         /// <summary>
-        /// Contenu adulte : cycle a trois etats, aligne a droite de la barre.
+        /// Contenu adulte : un interrupteur, deux etats.
         ///
-        /// Deux etats ne suffisaient pas. L'idee retenue est que les mods adultes restent
-        /// melanges aux autres, simplement masques — un interrupteur qui les fait disparaitre
-        /// dit autre chose. Le troisieme etat garde malgre tout la possibilite de les exclure
-        /// entierement, pour qui la veut.
+        /// Un cycle a trois etats avait ete tente, et c'etait une mauvaise idee : il fallait
+        /// cliquer pour decouvrir ce qu'il faisait, rien n'indiquait combien d'etats existaient
+        /// ni dans quel ordre. Le genre de controle qu'on trouve malin en l'ecrivant et penible
+        /// a l'usage.
         ///
-        ///   Hidden   XMA les laisse de cote et repond 403 sur leurs pages
-        ///   Blurred  melanges aux autres, vignettes pixellisees jusqu'au survol
-        ///   Shown    melanges aux autres, sans masquage
-        ///
-        /// Un clic passe au suivant. Hidden reste le point de depart d'une installation neuve :
-        /// ce n'est pas au plugin de decider ce qu'un nouvel utilisateur veut voir.
+        /// La barre ne porte donc plus que la question qu'on se pose souvent — voir ces mods ou
+        /// non. Le degre de masquage est un reglage, dans la configuration ; le choix fin entre
+        /// melanges, exclusifs et exclus reste dans les options de recherche, ou les trois
+        /// libelles se lisent d'un coup d'oeil sans avoir a cliquer.
         /// </summary>
         private static void DrawAdultToggle(Plugin plugin, NavTarget current)
         {
@@ -111,78 +109,40 @@ namespace ModArchiveBrowser.Utils
             //La page d'accueil est la vitrine de XMA, servie telle quelle : elle n'accepte aucun
             //parametre de recherche, donc aucun filtre.
             var applicable = current != NavTarget.Home;
+            var enabled = config.AllowNsfw;
 
-            //Chaque etat a sa couleur de repos et sa couleur de survol. Les passer identiques,
-            //comme je l'avais fait, prive le bouton de toute reaction : il ressemble alors a un
-            //bouton ordinaire qui refuse de s'allumer, ce qui se lit comme un defaut.
-            var (icon, label, tint, hover) = !config.AllowNsfw
-                ? (FontAwesomeIcon.EyeSlash, "Adult hidden", Neutral, NeutralHovered)
-                : config.BlurAdultThumbnails
-                    ? (FontAwesomeIcon.LowVision, "Adult blurred", Warm, WarmHovered)
-                    : (FontAwesomeIcon.Eye, "Adult shown", WarmHovered, Warm);
+            var icon = enabled ? FontAwesomeIcon.Eye : FontAwesomeIcon.EyeSlash;
+            var label = enabled ? "Adult on" : "Adult off";
 
             var width = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
             ImGui.SameLine(ImGui.GetContentRegionMax().X - width);
 
             using (ImRaii.Disabled(!applicable))
-            using (Theme.Emphasis(tint, hover))
+            using (enabled ? Theme.Emphasis(Warm, WarmHovered) : Theme.Emphasis(Neutral, NeutralHovered))
             {
                 if (ImGuiComponents.IconButtonWithText(icon, label))
-                    Cycle(plugin);
+                    Toggle(plugin, !enabled);
             }
 
             if (ImGui.IsItemHovered())
             {
+                var obscured = config.BlurAdultThumbnails
+                    ? "Their thumbnails stay obscured until hovered."
+                    : "Their thumbnails are shown as-is.";
+
                 ImGui.SetTooltip(!applicable
                     ? "The homepage is served by xivmodarchive as-is and takes no filter.\nUse Trending, Newest or Search to browse adult mods."
-                    : !config.AllowNsfw
-                        ? "Adult mods are left out entirely.\nClick to mix them in with their thumbnails obscured."
-                        : config.BlurAdultThumbnails
-                            ? "Adult mods are mixed in, thumbnails obscured until hovered.\nClick to reveal them."
-                            : "Adult mods are mixed in and fully visible.\nClick to leave them out.");
+                    : enabled
+                        ? $"Adult mods are mixed in with the rest.\n{obscured}"
+                        : "Adult mods are left out entirely.\nWhile off, xivmodarchive returns 403 for them: they cannot be browsed or installed at all.");
             }
         }
-
-        /// <summary>Passe a l'etat suivant : masques, brouilles, visibles.</summary>
-        private static void Cycle(Plugin plugin)
-        {
-            var config = plugin.Configuration;
-
-            if (!config.AllowNsfw)
-            {
-                config.AllowNsfw = true;
-                config.BlurAdultThumbnails = true;
-                _ = XmaSession.EnsureAsync();
-            }
-            else if (config.BlurAdultThumbnails)
-            {
-                config.BlurAdultThumbnails = false;
-            }
-            else
-            {
-                config.AllowNsfw = false;
-                //On remet le masquage : le cycle repart ainsi toujours de "hidden" vers
-                //"blurred", et jamais directement vers "shown".
-                config.BlurAdultThumbnails = true;
-                XmaSession.Close();
-                //Sans cette purge, les pages adultes deja consultees seraient resservies depuis
-                //le cache disque sans jamais repasser par le 403 de XMA.
-                WebClient.ClearHtmlCache();
-            }
-
-            config.Save();
-            plugin.searchWindow.ApplyAdultMode(config.AllowNsfw);
-        }
-
-        private static readonly Vector4 Warm = new(0.72f, 0.31f, 0.44f, 1f);
-        private static readonly Vector4 WarmHovered = new(0.80f, 0.38f, 0.51f, 1f);
-        private static readonly Vector4 Neutral = new(0.18f, 0.19f, 0.22f, 1f);
-        private static readonly Vector4 NeutralHovered = new(0.26f, 0.28f, 0.32f, 1f);
 
         private static void Toggle(Plugin plugin, bool enabled)
         {
-            plugin.Configuration.AllowNsfw = enabled;
-            plugin.Configuration.Save();
+            var config = plugin.Configuration;
+            config.AllowNsfw = enabled;
+            config.Save();
 
             if (enabled)
             {
@@ -198,6 +158,11 @@ namespace ModArchiveBrowser.Utils
 
             plugin.searchWindow.ApplyAdultMode(enabled);
         }
+
+        private static readonly Vector4 Warm = new(0.72f, 0.31f, 0.44f, 1f);
+        private static readonly Vector4 WarmHovered = new(0.80f, 0.38f, 0.51f, 1f);
+        private static readonly Vector4 Neutral = new(0.18f, 0.19f, 0.22f, 1f);
+        private static readonly Vector4 NeutralHovered = new(0.26f, 0.28f, 0.32f, 1f);
 
         private static void Tab(Plugin plugin, NavTarget current, NavTarget target, FontAwesomeIcon icon, string label, string tooltip)
         {
