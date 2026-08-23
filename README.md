@@ -68,17 +68,24 @@ If you found a bug please open an issue on GitHub detailing
 
 ## How to install
 
-**No release has been published from this fork yet.** The CI workflows are inherited from upstream
-and still target its configuration, so there is no plugin repository to point Dalamud at. Build from
-source in the meantime:
+You need [Penumbra](https://github.com/xivdev/Penumbra) installed first.
+
+1. `/xlsettings` → **Experimental** tab
+2. Paste this into the custom plugin repositories list:
+   ```
+   https://raw.githubusercontent.com/vhub59/ModArchiveBrowser/master/repo.json
+   ```
+3. Click the **+** button, then **Save and Close**
+4. `/xlplugins` → search for **XIV Mod Archive Browser** → Install
+
+### Building from source
 
 1. Install the .NET 10 SDK
 2. `dotnet build ModArchiveBrowser/ModArchiveBrowser.csproj -c Release`
 3. `/xlsettings` → Experimental → Dev Plugin Locations → add the built `ModArchiveBrowser.dll`
-4. `/xlplugins` → "Search for new dev plugins" → enable it
 
-No sibling checkout is needed: `Penumbra.Api` comes from NuGet, where the original expected a
-`../Penumbra.Api` project on disk.
+No submodule or sibling checkout is needed: `Penumbra.Api` comes from NuGet, where the original
+expected a `../Penumbra.Api` project on disk.
 
 ## Commands
 
@@ -102,7 +109,7 @@ If you fork this further, please keep that part.
 
 Contributions are welcome. Please open an issue discussing what you want to add before you start,
 to see if it is within scope. Note that the CI workflows are inherited from the upstream repository
-and still target its configuration; they need rework before any release from this fork.
+and still target its configuration; releases are cut by hand until they are reworked.
 
 ## Credits
 

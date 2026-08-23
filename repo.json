@@ -1,24 +1,30 @@
 [
   {
-    "Author": "Noevain",
+    "Author": "Noevain, vhub59",
     "Name": "XIV Mod Archive Browser",
-    "Punchline": "Browse and install mods from the comfort of your FFXIV house ",
-    "Description": "Lets you browse and install mods in 1 click from www.xivmodarchive.com and add the modthumbnail in Penumbra",
     "InternalName": "ModArchiveBrowser",
-    "AssemblyVersion": "0.7.0",
-    "RepoUrl": "https://github.com/Noevain/ModArchiveBrowser",
+    "AssemblyVersion": "0.8.0",
+    "Description": "Browse xivmodarchive.com from inside the game and install mods into Penumbra in one click. Fork of Noevain/ModArchiveBrowser, updated for Dalamud API 15.",
+    "Punchline": "Browse and install mods from the comfort of your FFXIV house",
     "ApplicableVersion": "any",
-    "DalamudApiLevel": 11,
-    "IsHide": "False",
-    "IsTestingExclusive": "False",
-    "DownloadCount": 0,
-    "LastUpdate": 0,
-    "LoadPriority": 0,
+    "Tags": [
+      "browser",
+      "plugin",
+      "mods"
+    ],
+    "DalamudApiLevel": 15,
     "LoadRequiredState": 0,
     "LoadSync": false,
-    "AcceptsFeedback": false,
-    "DownloadLinkInstall": "https://github.com/Noevain/ModArchiveBrowser/releases/download/0.7.0/ModArchiveBrowser.zip",
-    "DownloadLinkUpdate": "https://github.com/Noevain/ModArchiveBrowser/releases/download/0.7.0/ModArchiveBrowser.zip",
-    "IconUrl": "https://raw.githubusercontent.com/Noevain/ModArchiveBrowser/master/images/icon.png"
+    "CanUnloadAsync": false,
+    "LoadPriority": 0,
+    "AcceptsFeedback": true,
+    "IsHide": false,
+    "DownloadCount": 0,
+    "LastUpdate": 0,
+    "RepoUrl": "https://github.com/vhub59/ModArchiveBrowser",
+    "IconUrl": "https://raw.githubusercontent.com/vhub59/ModArchiveBrowser/master/images/icon.png",
+    "DownloadLinkInstall": "https://github.com/vhub59/ModArchiveBrowser/releases/download/v0.8.0/ModArchiveBrowser.zip",
+    "DownloadLinkUpdate": "https://github.com/vhub59/ModArchiveBrowser/releases/download/v0.8.0/ModArchiveBrowser.zip",
+    "DownloadLinkTesting": "https://github.com/vhub59/ModArchiveBrowser/releases/download/v0.8.0/ModArchiveBrowser.zip"
   }
 ]
