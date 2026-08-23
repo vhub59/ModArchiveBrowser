@@ -110,6 +110,32 @@ namespace ModArchiveBrowser
             return nodes[0].GetAttributeValue(attribute, fallback);
         }
 
+        /// <summary>
+        /// Version publiee d'un mod, ou une chaine vide si la page ne l'annonce pas.
+        ///
+        /// Recuperation volontairement legere : le detecteur de mises a jour interroge une page
+        /// par mod installe, il n'a pas besoin du reste de la fiche.
+        /// </summary>
+        public static string GetModVersion(string modId)
+        {
+            try
+            {
+                var page = ClientInstance.Load($"{xivmodarchiveRoot}/modid/{modId}");
+                var node = page.DocumentNode.SelectSingleNode("//code[contains(@class, 'text-light') and contains(text(), 'Version')]");
+                if (node == null)
+                    return string.Empty;
+
+                //Le noeud contient "Version: 1.4" ; on ne garde que le numero.
+                var match = System.Text.RegularExpressions.Regex.Match(node.InnerText, @"([\d]+(?:\.[\d]+)*)");
+                return match.Success ? match.Groups[1].Value : string.Empty;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.Debug($"Could not read the version of mod {modId}: {e.Message}");
+                return string.Empty;
+            }
+        }
+
         public static List<ModThumb> GetHomePageMods()
         {
             HtmlDocument homepage = ClientInstance.Load(xivmodarchiveRoot);

@@ -35,6 +35,9 @@ public sealed class Plugin : IDalamudPlugin
     public SearchWindow searchWindow { get; init; }
     public ModWindow modWindow { get; init; }
 
+    /// <summary>Compare les mods installes a ce que XMA publie.</summary>
+    public readonly UpdateChecker updateChecker;
+
     public ImageHandler imageHandler = null!;
     public ModHandler modHandler = null!;
 
@@ -61,6 +64,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(modWindow);
         WindowSystem.AddWindow(searchWindow);
         penumbra = new PenumbraService(PluginInterface,this);
+        updateChecker = new UpdateChecker(this);
 
         CommandManager.AddHandler("/archive", new CommandInfo(OnCommand)
         {

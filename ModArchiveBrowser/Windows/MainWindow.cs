@@ -185,13 +185,86 @@ public class MainWindow : Window, IDisposable
         NavBar.Draw(plugin, CurrentTarget);
         ImGui.Separator();
 
-        if (CurrentTarget == NavTarget.Home)
+        switch (CurrentTarget)
         {
-            DrawHomePageTable();
+            case NavTarget.Home:
+                DrawHomePageTable();
+                break;
+
+            case NavTarget.Updates:
+                DrawUpdates();
+                break;
+
+            default:
+                plugin.searchWindow.DrawEmbedded(NavBar.TitleOf(CurrentTarget));
+                break;
         }
-        else
+    }
+
+    /// <summary>
+    /// Mods installes pour lesquels XMA publie une autre version.
+    ///
+    /// Penumbra inscrit dans chaque meta.json l'adresse d'origine du mod : on sait donc lesquels
+    /// viennent de XMA, et avec quel identifiant. La verification coute une requete par mod
+    /// installe — quelques dizaines — la ou indexer le catalogue entier en demanderait 52 000.
+    /// </summary>
+    private void DrawUpdates()
+    {
+        var checker = plugin.updateChecker;
+
+        NavBar.Context(NavBar.TitleOf(NavTarget.Updates), checker.Updates.Count);
+
+        var label = checker.IsRunning ? $"Checking {checker.Checked}/{checker.Total}" : "Check now";
+        var buttonWidth = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - buttonWidth);
+
+        using (ImRaii.Disabled(checker.IsRunning))
         {
-            plugin.searchWindow.DrawEmbedded(NavBar.TitleOf(CurrentTarget));
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.SyncAlt, label))
+                checker.Start();
+        }
+
+        ImGui.Separator();
+
+        if (checker.LastRun == null && !checker.IsRunning)
+        {
+            ImGui.TextDisabled("Your installed mods have not been checked yet.");
+            ImGui.Spacing();
+            ImGui.TextDisabled("Only mods installed from xivmodarchive can be checked:");
+            ImGui.TextDisabled("Penumbra records where each mod came from, and that is what this compares.");
+            return;
+        }
+
+        if (checker.Updates.Count == 0)
+        {
+            ImGui.TextDisabled(checker.IsRunning ? "Checking..." : "Everything is up to date.");
+            return;
+        }
+
+        foreach (var update in checker.Updates)
+        {
+            ImGui.TextUnformatted(update.Name);
+            ImGui.SameLine();
+            ImGui.TextDisabled($"·  {update.InstalledVersion}  →  {update.PublishedVersion}");
+
+            ImGui.SameLine(ImGui.GetContentRegionMax().X - 100f);
+
+            //Ouvrir la fiche plutot qu'installer d'ici : son bouton connait deja l'etat exact du
+            //mod, et l'utilisateur voit ce qu'il installe avant de le faire.
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.ArrowRight, $"View##{update.ModId}"))
+            {
+                try
+                {
+                    plugin.modWindow.ChangeMod(update.ModId);
+                    ShowingMod = true;
+                }
+                catch (Exception e)
+                {
+                    Plugin.ReportError("Error while loading mod,check /xllog for details", e);
+                }
+            }
+
+            ImGui.Separator();
         }
     }
 }

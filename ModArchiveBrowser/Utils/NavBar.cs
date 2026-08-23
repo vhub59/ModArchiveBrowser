@@ -15,6 +15,7 @@ namespace ModArchiveBrowser.Utils
         Trending,
         Newest,
         Sponsored,
+        Updates,
     }
 
     /// <summary>
@@ -43,6 +44,17 @@ namespace ModArchiveBrowser.Utils
             Tab(plugin, current, NavTarget.Newest, FontAwesomeIcon.Certificate, "Newest", "Newest mods from all users");
             ImGui.SameLine();
             Tab(plugin, current, NavTarget.Sponsored, FontAwesomeIcon.Star, "Sponsored", "New and updated mods from Patreon subscribers");
+
+            ImGui.SameLine();
+            ImGui.TextDisabled("|");
+            ImGui.SameLine();
+
+            //Le nombre de mises a jour figure dans le libelle : c'est l'information qu'on veut
+            //voir sans avoir a ouvrir l'onglet.
+            var pending = plugin.updateChecker.Updates.Count;
+            Tab(plugin, current, NavTarget.Updates, FontAwesomeIcon.SyncAlt,
+                pending > 0 ? $"Updates ({pending})" : "Updates",
+                "Compare your installed mods with what xivmodarchive publishes today");
 
             DrawAdultToggle(plugin, current);
         }
@@ -180,6 +192,9 @@ namespace ModArchiveBrowser.Utils
             plugin.MainWindow.BringToFront();
             plugin.MainWindow.CurrentTarget = target;
 
+            if (target == NavTarget.Updates)
+                return;
+
             var preset = target switch
             {
                 NavTarget.Trending => WebClient.today_most_viewed,
@@ -199,6 +214,7 @@ namespace ModArchiveBrowser.Utils
         public static string TitleOf(NavTarget target) => target switch
         {
             NavTarget.Home => "Homepage",
+            NavTarget.Updates => "Updates",
             NavTarget.Trending => "Trending today",
             NavTarget.Newest => "Newest mods",
             NavTarget.Sponsored => "Sponsored mods",
