@@ -200,14 +200,7 @@ namespace ModArchiveBrowser
             //.ttmp2 or .pmp - Direct install
             if (extension == ".ttmp2" || extension == ".pmp")
             {
-                Plugin.Logger.Debug($"Installing mod directly: {filePath}");
-                plugin.penumbra.InstallMod(filePath);
-                Plugin.Logger.Debug($"Saving thumbnail: {imagepath}");
-                File.Copy(imagepath, Path.Combine(_thumbnailDirectory,Path.GetFileName(imagepath)), true);
-                //the penumbra mod directory will have the same name as the file
-                _modNameToThumbnail.Add(Path.GetFileNameWithoutExtension(filePath), Path.Combine(_thumbnailDirectory,Path.GetFileName(imagepath)));
-                UpdateTextures();
-                plugin.penumbra.OpenModWindow();
+                InstallSingle(filePath, imagepath);
             }
             //Extract .ttmp2 and .pmp files, queue everything
             else if (extension == ".zip" || extension == ".rar" || extension == ".7z")
@@ -229,17 +222,7 @@ namespace ModArchiveBrowser
 
                 // Install each extracted mod file
                 foreach (var modFile in modFiles)
-                {
-                    Plugin.Logger.Debug($"Installing extracted mod: {modFile}");
-                    plugin.penumbra.InstallMod(modFile);
-                    Plugin.Logger.Debug($"Saving thumbnail: {imagepath}");
-                    File.Copy(imagepath, Path.Combine(_thumbnailDirectory,Path.GetFileName(imagepath)), true);
-                    //Indexeur plutôt que Add : une archive peut porter plusieurs modpacks, et
-                    //Add aurait levé une ArgumentException dès le deuxième tour de boucle.
-                    _modNameToThumbnail[Path.GetFileNameWithoutExtension(modFile)] = Path.Combine(_thumbnailDirectory,Path.GetFileName(imagepath));
-                    UpdateTextures();
-                    plugin.penumbra.OpenModWindow();
-                }
+                    InstallSingle(modFile, imagepath);
             }
             else
             {
@@ -247,7 +230,37 @@ namespace ModArchiveBrowser
             }
         }
 
+        /// <summary>
+        /// Transmet un modpack à Penumbra, sauf s'il s'y trouve déjà.
+        ///
+        /// Penumbra ne déduplique pas : à chaque appel d'InstallMod il crée un dossier suffixé
+        /// "(2)", "(3)"... Sans cette garde, réinstaller le même mod empilait les copies —
+        /// trois dossiers de 95 Mo pour un seul mod, constaté en test.
+        /// </summary>
+        private void InstallSingle(string modFile, string imagepath)
+        {
+            var modName = Path.GetFileNameWithoutExtension(modFile);
 
+            if (plugin.penumbra.IsModInstalled(modName))
+            {
+                Plugin.ReportError($"\"{modName}\" is already installed in Penumbra, skipping.", null);
+                plugin.penumbra.OpenModWindow();
+                return;
+            }
+
+            Plugin.Logger.Debug($"Installing mod: {modFile}");
+            plugin.penumbra.InstallMod(modFile);
+
+            Plugin.Logger.Debug($"Saving thumbnail: {imagepath}");
+            File.Copy(imagepath, Path.Combine(_thumbnailDirectory, Path.GetFileName(imagepath)), true);
+
+            //Indexeur plutôt que Add : réinstaller un mod, ou traiter une archive portant
+            //plusieurs modpacks, aurait levé une ArgumentException.
+            _modNameToThumbnail[modName] = Path.Combine(_thumbnailDirectory, Path.GetFileName(imagepath));
+
+            UpdateTextures();
+            plugin.penumbra.OpenModWindow();
+        }
 
         private List<string> ExtractModFiles(string archivePath)
         {

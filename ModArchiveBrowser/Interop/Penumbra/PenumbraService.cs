@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -61,6 +61,39 @@ namespace ModArchiveBrowser.Interop.Penumbra
                 Plugin.Logger.Debug($"Could not queue mod for install:\n{ex}");
                 return PenumbraApiEc.UnknownError;
             }
+        }
+
+        /// <summary>Mods déjà connus de Penumbra : répertoire -> nom affiché.</summary>
+        public Dictionary<string, string> GetInstalledMods()
+        {
+            if (!Available)
+                return new Dictionary<string, string>();
+
+            try
+            {
+                return _getMods!.Invoke();
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.Debug($"Could not read Penumbra mod list:\n{ex}");
+                return new Dictionary<string, string>();
+            }
+        }
+
+        /// <summary>
+        /// Vrai si Penumbra connaît déjà un mod portant ce nom.
+        ///
+        /// Penumbra n'écrase pas et ne refuse pas : sur collision il crée un dossier suffixé
+        /// "(2)", "(3)"... Sans cette vérification, chaque clic sur installer duplique le mod
+        /// sur le disque — trois copies de 95 Mo pour un seul mod, constaté en test.
+        /// </summary>
+        public bool IsModInstalled(string modName)
+        {
+            if (string.IsNullOrWhiteSpace(modName))
+                return false;
+
+            return GetInstalledMods().Values
+                .Any(name => string.Equals(name, modName, StringComparison.OrdinalIgnoreCase));
         }
 
         public PenumbraApiEc OpenModWindow()
