@@ -106,6 +106,11 @@ namespace ModArchiveBrowser.Utils
         VFX = 14,
         Animation = 15,
         Sound = 16,
+        //Deux types absents de l'enumeration d'origine, identifies en interrogeant le site :
+        //17 renvoie des mods de type "Dalamud Plugin", 18 des "Modding Tool". Le 18 figure
+        //pourtant dans la selection par defaut de XMA, il manquait donc a la liste des cases.
+        DalamudPlugin = 17,
+        ModdingTool = 18,
     }
 
     public enum NSFW

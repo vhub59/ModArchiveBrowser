@@ -568,7 +568,16 @@ namespace ModArchiveBrowser
             if (!string.IsNullOrEmpty(affects)) queryParams["affects"] = affects;
             if (!string.IsNullOrEmpty(comments)) queryParams["comments"] = comments;
             
-            if (types != null && types.Count > 0)
+            //Sans parametre "types", XMA applique sa propre selection par defaut, qui exclut les
+            //poses, les presets ReShade, la categorie Other et les plugins Dalamud. Les poses a
+            //elles seules pesent 30 381 mods : ne rien envoyer revenait a masquer un tiers du
+            //catalogue. On envoie donc explicitement tout ce qui existe quand l'utilisateur n'a
+            //rien coche — 96 206 mods au lieu de 63 900.
+            types ??= new HashSet<Types>();
+            if (types.Count == 0)
+                types = new HashSet<Types>(Enum.GetValues<Types>());
+
+            if (types.Count > 0)
             {
                 // comma-separated string for url
                 var typesString = string.Join("%2C", types.Select(t => ((int)t).ToString()));
