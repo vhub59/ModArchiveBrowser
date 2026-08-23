@@ -46,22 +46,23 @@ namespace ModArchiveBrowser.Utils
         /// Ligne de contexte : nom de la vue, puis nombre d'éléments et page en gris.
         /// C'est la reponse a "on ne sait meme pas ou on est".
         /// </summary>
-        public static void Context(string title, int count, int page = 0, int pageCount = 0)
+        public static void Context(string title, int total, int shown = 0)
         {
             ImGui.TextUnformatted(title);
-
             ImGui.SameLine();
-            var detail = count switch
+
+            var detail = total switch
             {
                 0 => "no mods",
                 1 => "1 mod",
-                _ => $"{count:N0} mods",
+                _ => $"{total:N0} mods",
             };
 
-            //Le total de la recherche, pas le contenu de la page : afficher "15 mods" pour une
-            //recherche en comptant 1854 laissait croire que le filtre avait tout balaye.
-            if (page > 0)
-                detail += pageCount > 0 ? $"  ·  page {page} of {pageCount}" : $"  ·  page {page}";
+            //On annonce le total de la recherche et ce qui est charge a l'ecran. Afficher le seul
+            //contenu de la page ("15 mods") pour une recherche en comptant 60 521 laissait croire
+            //que le filtre avait tout balaye.
+            if (shown > 0 && shown < total)
+                detail += $"  ·  showing {shown:N0}";
 
             ImGui.TextDisabled($"·  {detail}");
         }

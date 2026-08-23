@@ -57,16 +57,42 @@ namespace ModArchiveBrowser.Windows
 
         }
         //Search Url should already have been built before being passed
-        public void UpdateSearch(string url)
+        public void UpdateSearch(string url) => UpdateSearch(url, false);
+
+        /// <summary>
+        /// Charge une page de resultats, en remplacement ou a la suite des precedentes.
+        ///
+        /// XMA sert quinze mods par page et n'accepte aucun parametre pour en servir davantage :
+        /// per_page, limit, pageSize, count et results ont tous ete essayes, tous renvoient
+        /// quinze. Afficher plus suppose donc plusieurs requetes, faites a la demande plutot
+        /// qu'a chaque affichage.
+        /// </summary>
+        public void UpdateSearch(string url, bool append)
         {
-            searchTask = Task.Run((async () =>
-                                      {
-                                          var searchRes = WebClient.DoSearch(url);
-                                          this.modThumbs = searchRes.Mods;
-                                          this.totalCount = searchRes.TotalCount;
-                                          this.pageCount = searchRes.PageCount;
-                                          RebuildSharedTextures();
-                                      }));
+            searchTask = Task.Run(() =>
+            {
+                var searchRes = WebClient.DoSearch(url);
+
+                if (append && this.modThumbs != null)
+                {
+                    //Un meme mod peut revenir sur deux pages si son classement bouge entre les
+                    //deux requetes. On remplace la liste entiere plutot que d'y ajouter en place :
+                    //la boucle de rendu la lit pendant ce temps, et un echange de reference est
+                    //atomique la ou une insertion ne l'est pas.
+                    var seen = new HashSet<string>(this.modThumbs.Select(m => m.url));
+                    this.modThumbs = this.modThumbs
+                        .Concat(searchRes.Mods.Where(m => seen.Add(m.url)))
+                        .ToList();
+                }
+                else
+                {
+                    this.modThumbs = searchRes.Mods;
+                }
+
+                this.totalCount = searchRes.TotalCount;
+                this.pageCount = searchRes.PageCount;
+                RebuildSharedTextures();
+            });
         }
 
         private void RebuildSharedTextures()
@@ -94,7 +120,7 @@ namespace ModArchiveBrowser.Windows
         /// </summary>
         public void DrawEmbedded(string title)
         {
-            NavBar.Context(title, totalCount > 0 ? totalCount : modThumbs?.Count ?? 0, page, pageCount);
+            NavBar.Context(title, totalCount > 0 ? totalCount : modThumbs?.Count ?? 0, modThumbs?.Count ?? 0);
             ImGui.Separator();
 
             DrawSearchHeader();
@@ -158,7 +184,7 @@ namespace ModArchiveBrowser.Windows
         /// Search, la page precedente et la page suivante — avec quatorze parametres chacun. Un
         /// filtre ajoute a un seul des trois aurait suffi a rendre la pagination incoherente.
         /// </summary>
-        private void RunSearch(int targetPage)
+        private void RunSearch(int targetPage, bool append = false)
         {
             page = Math.Max(1, targetPage);
 
@@ -180,7 +206,7 @@ namespace ModArchiveBrowser.Windows
             );
 
             Plugin.Logger.Debug(url);
-            searchTask = Task.Run(() => UpdateSearch(url));
+            UpdateSearch(url, append);
         }
 
         /// <summary>Largeur réservée aux libellés, pour que les champs s'alignent entre eux.</summary>
@@ -389,27 +415,29 @@ namespace ModArchiveBrowser.Windows
 
             ImGui.Spacing();
             ImGui.Separator();
-            //Pagination centree. Les deux fleches reconstruisaient chacune l'URL complete ;
-            //elles passent maintenant par RunSearch, qui est la seule a la connaitre.
+            //Un bouton "Load more" plutot que des fleches. XMA sert quinze mods par page :
+            //avec des fleches, parcourir un catalogue de 60 000 mods demandait un aller-retour
+            //par tranche de quinze, en perdant a chaque fois ce qu'on venait de voir. Les pages
+            //s'accumulent desormais, comme sur n'importe quel catalogue en ligne.
             ImGui.Spacing();
 
-            var arrowWidth = ImGui.GetFrameHeight();
-            var pageLabel = $"page {page}";
-            var totalWidth = arrowWidth * 2f + ImGui.CalcTextSize(pageLabel).X + ImGui.GetStyle().ItemSpacing.X * 2f;
-            ImGui.SetCursorPosX((ImGui.GetWindowWidth() - totalWidth) * 0.5f);
+            var atEnd = pageCount > 0 && page >= pageCount;
+            var loading = searchTask is { IsCompleted: false };
+            var label = atEnd ? "Everything is loaded" : loading ? "Loading..." : "Load more";
 
-            using (ImRaii.Disabled(page <= 1))
+            var buttonWidth = MathF.Max(160f, ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 4f);
+            ImGui.SetCursorPosX((ImGui.GetWindowWidth() - buttonWidth) * 0.5f);
+
+            using (ImRaii.Disabled(atEnd || loading))
             {
-                if (ImGui.ArrowButton("SearchGoBack", ImGuiDir.Left))
-                    RunSearch(page - 1);
+                if (ImGui.Button(label, new Vector2(buttonWidth, 0)))
+                    RunSearch(page + 1, append: true);
             }
 
-            ImGui.SameLine();
-            ImGui.TextDisabled(pageLabel);
-            ImGui.SameLine();
+            if (!atEnd && ImGui.IsItemHovered())
+                ImGui.SetTooltip($"Loads 15 more mods (page {page + 1} of {pageCount}).");
 
-            if (ImGui.ArrowButton("SearchGoForward", ImGuiDir.Right))
-                RunSearch(page + 1);
+            ImGui.Spacing();
         }
 
         /// <summary>
