@@ -29,6 +29,8 @@ namespace ModArchiveBrowser.Windows
         private string _statusMessage = string.Empty;
         private bool lastNodeWasBr = false;
         private bool _alreadyInstalled = false;
+        //Nom d'un mod deja installe qui ressemble a celui-ci, sans lui etre identique.
+        private string? _similarInstalled = null;
         public ModWindow(Plugin plugin): base("Mod view window##")
         {
             this.plugin = plugin;
@@ -116,21 +118,25 @@ namespace ModArchiveBrowser.Windows
         /// </summary>
         private void RefreshInstalledState()
         {
+            _alreadyInstalled = false;
+            _similarInstalled = null;
+
             if (!HostedByXma)
-            {
-                _alreadyInstalled = false;
                 return;
-            }
 
             try
             {
                 var fileName = Path.GetFileNameWithoutExtension(
                     Uri.UnescapeDataString(new Uri(WebClient.xivmodarchiveRoot + mod!.Value.url_download_button).AbsolutePath));
+
                 _alreadyInstalled = plugin.penumbra.IsModInstalled(fileName);
+                if (!_alreadyInstalled)
+                    _similarInstalled = plugin.penumbra.FindSimilarMod(fileName);
             }
             catch
             {
                 _alreadyInstalled = false;
+                _similarInstalled = null;
             }
         }
         public void Dispose()
@@ -390,8 +396,20 @@ namespace ModArchiveBrowser.Windows
                     {
                         case ".pmp":
                         case ".ttmp2":
-                            if (ImGui.Button("Install using Penumbra"))
+                            //Un mod ressemblant est signale sans etre bloque : la comparaison est
+                            //volontairement large et peut se tromper, c'est a l'utilisateur de
+                            //trancher.
+                            if (_similarInstalled != null)
+                            {
+                                if (ImGui.Button("Install anyway"))
+                                    StartInstall();
+                                if (ImGui.IsItemHovered())
+                                    ImGui.SetTooltip($"Penumbra already has \"{_similarInstalled}\",\nwhich looks like the same mod under another name.");
+                            }
+                            else if (ImGui.Button("Install using Penumbra"))
+                            {
                                 StartInstall();
+                            }
                             break;
 
                         case ".zip":
