@@ -67,36 +67,32 @@ namespace ModArchiveBrowser.Utils
 
             DrawThumbnail(draw, texture, origin, width, imageHeight);
 
-            //Le texte passe par de vrais widgets et non par la liste de dessin : ImGui gère alors
-            //le clipping et les polices. On repositionne simplement le curseur, que le bouton
-            //invisible a déjà fait avancer. Rien ici n'est interactif, le clic reste au bouton.
+            //Tout le contenu est peint par la liste de dessin, jamais par des widgets.
+            //Un widget dessine apres le bouton invisible deviendrait le "dernier element" d'ImGui,
+            //et le ImGui.SameLine() de l'appelant s'alignerait sur lui plutot que sur la carte :
+            //les cartes se decalaient alors en escalier. Le bouton invisible doit rester le
+            //dernier element de la carte.
             var textLeft = origin.X + pad.X;
             var textWidth = width - pad.X * 2f;
-            var cursor = ImGui.GetCursorScreenPos();
+            var textColor = ImGui.GetColorU32(ImGuiCol.Text);
+            var mutedColor = ImGui.GetColorU32(ImGuiCol.TextDisabled);
+            var baseY = origin.Y + imageHeight + pad.Y;
 
-            ImGui.SetCursorScreenPos(new Vector2(textLeft, origin.Y + imageHeight + pad.Y));
-            ImGui.TextUnformatted(Ellipsize(thumb.name, textWidth));
-
-            ImGui.SetCursorScreenPos(new Vector2(textLeft, origin.Y + imageHeight + pad.Y + lineHeight));
-            ImGui.TextDisabled(Ellipsize($"by {thumb.author}", textWidth));
+            draw.AddText(new Vector2(textLeft, baseY), textColor, Ellipsize(thumb.name, textWidth));
+            draw.AddText(new Vector2(textLeft, baseY + lineHeight), mutedColor, Ellipsize($"by {thumb.author}", textWidth));
 
             //Type, genre et vues sur une seule ligne : les vues alignées à droite, calculées et
             //non décalées de cent pixels au jugé.
-            var meta = Ellipsize($"{thumb.type} · {thumb.genders}", textWidth * 0.6f);
             var views = thumb.views?.Trim() ?? string.Empty;
-            var metaY = origin.Y + imageHeight + pad.Y + lineHeight * 2f;
+            var viewsWidth = string.IsNullOrEmpty(views) ? 0f : ImGui.CalcTextSize(views).X;
+            var metaY = baseY + lineHeight * 2f;
+            var metaWidth = MathF.Max(0f, textWidth - viewsWidth - pad.X);
 
-            ImGui.SetCursorScreenPos(new Vector2(textLeft, metaY));
-            ImGui.TextDisabled(meta);
+            draw.AddText(new Vector2(textLeft, metaY), mutedColor, Ellipsize($"{thumb.type} · {thumb.genders}", metaWidth));
 
             if (!string.IsNullOrEmpty(views))
-            {
-                var viewsWidth = ImGui.CalcTextSize(views).X;
-                ImGui.SetCursorScreenPos(new Vector2(origin.X + width - pad.X - viewsWidth, metaY));
-                ImGui.TextDisabled(views);
-            }
+                draw.AddText(new Vector2(origin.X + width - pad.X - viewsWidth, metaY), mutedColor, views);
 
-            ImGui.SetCursorScreenPos(cursor);
             return clicked;
         }
 
