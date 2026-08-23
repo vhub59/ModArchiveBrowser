@@ -25,7 +25,10 @@ namespace ModArchiveBrowser.Windows
         private NSFW selectedNSFW = NSFW.False;
         //14 897 mods sur 52 114 : filtre reel, jusqu'ici accessible par le seul onglet Sponsored.
         private bool sponsoredOnly = false;
-        private DTCompatibility selectedDTCompat = DTCompatibility.TexToolsCompatible;
+        //Le plus large par defaut : le seuil est cumulatif, et le precedent defaut retirait
+        //2 617 mods de la vue sans le dire. Mieux vaut tout montrer et signaler ce qui ne
+        //fonctionne pas, ce que fait deja la banniere de compatibilite sur la fiche.
+        private DTCompatibility selectedDTCompat = DTCompatibility.NotCompatible;
         private HashSet<Types> selectedType = new HashSet<Types>();
         private Plugin plugin;
 

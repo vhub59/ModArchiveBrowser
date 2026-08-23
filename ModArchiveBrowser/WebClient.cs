@@ -18,11 +18,14 @@ namespace ModArchiveBrowser
         public const string xivmodarchiveRoot = "https://www.xivmodarchive.com";
         //nsfl retire des trois prereglages : mesure faite, le parametre ne change rien au nombre de
         //resultats, quelle que soit sa valeur.
-        public const string new_and_updated_from_patreon_subs = "search?sponsored=true&dt_compat=1&sortby=time_edited&sortorder=desc";
-        public const string today_most_viewed = "search?dt_compat=1&sortby=views_today&sortorder=desc";
+        //dt_compat=3 et non 1 : le seuil est cumulatif, et s'arreter a 1 ecartait 2 617 mods
+        //silencieusement. Le catalogue est montre en entier, l'interface disant ensuite de chacun
+        //s'il est installable et s'il fonctionne sous Dawntrail.
+        public const string new_and_updated_from_patreon_subs = "search?sponsored=true&dt_compat=3&sortby=time_edited&sortorder=desc";
+        public const string today_most_viewed = "search?dt_compat=3&sortby=views_today&sortorder=desc";
         //"time_published" ne figure pas dans les valeurs acceptees par le site : le tri retombait sur
         //le defaut. La valeur attendue est "time_posted".
-        public const string newest_mods_from_all_users = "search?dt_compat=1&sortby=time_posted&sortorder=desc";
+        public const string newest_mods_from_all_users = "search?dt_compat=3&sortby=time_posted&sortorder=desc";
         public static readonly string HtmlCachePath =
             Path.Combine(System.IO.Path.GetTempPath(), "modarchivebrowser\\htmlcache");
 
