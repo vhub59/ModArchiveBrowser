@@ -1,4 +1,5 @@
 ﻿using System;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Textures.TextureWraps;
 using System.Collections.Generic;
 using System.Numerics;
@@ -109,124 +110,196 @@ namespace ModArchiveBrowser.Windows
 
         public void DrawSearchHeader()
         {
-            // Search Form
-            ImGui.InputText("Search for mods...", ref searchQuery, 100);
-            ImGui.SameLine();
-            if (ImGui.Button("Search"))
-            {
-                page = 1;
-                string url = WebClient.BuildSearchURL(
-                    selectedSortBy,
-                    selectedSortOrder,
-                    basicText: searchQuery,
-                    nsfw: selectedNSFW,
-                    name: modName,
-                    author: modAuthor,
-                    gender: selectedGender,
-                    race: modRaces,
-                    tags: modTags,
-                    affects: modAffects,
-                    comments: modComments,
-                    dtCompatibility: selectedDTCompat,
-                    types: selectedType
-                );
+            //Le libelle du champ ("Search for mods...") s'affichait a sa droite, colle au bouton
+            //Search : on ne savait plus lequel des deux appartenait a quoi. Il devient un texte
+            //d'invite a l'interieur du champ, et la touche Entree lance la recherche.
+            var buttonWidth = ImGui.CalcTextSize("Search").X + ImGui.GetStyle().FramePadding.X * 2f;
+            ImGui.SetNextItemWidth(-(buttonWidth + ImGui.GetStyle().ItemSpacing.X));
 
-                Plugin.Logger.Debug(url);
-                searchTask = Task.Run((() => {UpdateSearch(url); }));
+            var submitted = ImGui.InputTextWithHint(
+                "##searchquery",
+                "Search for mods...",
+                ref searchQuery,
+                100,
+                ImGuiInputTextFlags.EnterReturnsTrue);
+
+            ImGui.SameLine();
+            if (ImGui.Button("Search") || submitted)
+            {
+                RunSearch(1);
             }
 
             // Advanced Search Toggle
             if (ImGui.CollapsingHeader("Advanced Search Options"))
             {
-                if (ImGui.BeginChild("leftsearch", new Vector2(200, 0), true))
-                {
-                    ImGui.InputText("Name", ref modName, 100);
-                    ImGui.InputText("Races", ref modRaces, 100);
-                    ImGui.InputText("Author", ref modAuthor, 100);
-                    ImGui.InputText("Affects", ref modAffects, 100);
-                    ImGui.InputText("Tags", ref modTags, 100);
-                    ImGui.InputText("Comments", ref modComments, 100);
-                    ImGui.EndChild();
-                }
-                ImGui.SameLine();
-                if (ImGui.BeginChild("rightsearch", new Vector2(200, 0), true))
-                {
-                    // Gender Selection using Enum
-                    string[] genderOptions = { "Male", "Female", "Unisex", "Any" };
-                    int genderIndex = selectedGender.HasValue ? (int)selectedGender.Value : 3; // 'Any' is the last option
-                    if (ImGui.Combo("Gender", ref genderIndex, genderOptions, genderOptions.Length))
-                    {
-                        if (genderIndex < 3) // Valid gender selected
-                            selectedGender = (Gender)genderIndex;
-                        else
-                            selectedGender = null; // None selected
-                    }
-
-                    // NSFW Toggle
-                    //La case était désactivée en dur : sans session, XMA répondait 403 sur ces
-                    //pages et le filtre n'aurait mené qu'à des erreurs. /anon_login la rend
-                    //utilisable, mais seulement si l'utilisateur a donné son accord.
-                    bool nsfwAllowed = plugin.Configuration.AllowNsfw;
-                    bool nsfwSelected = nsfwAllowed && selectedNSFW == NSFW.True;
-
-                    //"Adult mods only" et non "NSFW" : le filtre de XMA est exclusif, pas additif.
-                    //Mesure faite sur le tag bibo+ : sans le parametre, 3391 resultats ; avec
-                    //nsfw=true, 1281 — et aucun des 3391 precedents. Cocher ne complete donc pas
-                    //la liste, il la remplace entierement, ce que l'ancienne etiquette laissait
-                    //croire au point de faire passer le filtre pour casse.
-                    ImGui.BeginDisabled(!nsfwAllowed);
-                    if (ImGui.Checkbox("Adult mods only", ref nsfwSelected))
-                    {
-                        selectedNSFW = nsfwSelected ? NSFW.True : NSFW.False;
-                    }
-                    ImGui.EndDisabled();
-
-                    if (ImGui.IsItemHovered())
-                    {
-                        ImGui.SetTooltip(nsfwAllowed
-                            ? "Replaces the results with adult mods only.\nxivmodarchive cannot mix both in one search."
-                            : "Enable \"Show adult (NSFW) mods\" in the plugin settings first.");
-                    }
-
-                    if (!nsfwAllowed)
-                    {
-                        //Accord retiré en cours de session : un ancien choix ne doit pas survivre.
-                        selectedNSFW = NSFW.False;
-                    }
-                    // DT Compatibility Dropdown
-                    string[] dtCompatOptions = { "Compatible", "Tex Tools partial","Partial Compatibility","Not compatible" };
-                    int dtCompatIndex = (int)selectedDTCompat;
-                    ImGui.Combo("DT Compatibility", ref dtCompatIndex, dtCompatOptions, dtCompatOptions.Length);
-                    selectedDTCompat = (DTCompatibility)dtCompatIndex;
-
-                    // Mod Types using Enum
-                    ImGui.Text("Types:");
-                    int i = 0;
-                    foreach(Types type in Enum.GetValues(typeof(Types)))
-                    {
-                        if(i%2 == 0)
-                        {
-                            ImGui.SameLine();
-                        }
-                        DrawTypeCheckbox(type);
-                        i++;
-                    }
-
-                    // Sorting Options
-                    string[] sortByOptions = { "Relevance", "Release Date", "Name", "Last Version Update", "Views","Views Today", "Downloads","Followers" };
-                    int sortByIndex = (int)selectedSortBy;
-                    ImGui.Combo("Sort By", ref sortByIndex, sortByOptions, sortByOptions.Length);
-                    selectedSortBy = (SortBy)sortByIndex;
-
-                    string[] sortOrderOptions = { "Ascending", "Descending" };
-                    int sortOrderIndex = (int)selectedSortOrder;
-                    ImGui.Combo("Sort Order", ref sortOrderIndex, sortOrderOptions, sortOrderOptions.Length);
-                    selectedSortOrder = (SortOrder)sortOrderIndex;
-                    ImGui.EndChild();
-                }
+                DrawAdvancedOptions();
             }
 
 
+        }
+
+        /// <summary>
+        /// Lance une recherche sur la page demandée.
+        ///
+        /// La construction de l'URL était recopiée à l'identique en trois endroits — le bouton
+        /// Search, la page precedente et la page suivante — avec quatorze parametres chacun. Un
+        /// filtre ajoute a un seul des trois aurait suffi a rendre la pagination incoherente.
+        /// </summary>
+        private void RunSearch(int targetPage)
+        {
+            page = Math.Max(1, targetPage);
+
+            var url = WebClient.BuildSearchURL(
+                selectedSortBy,
+                selectedSortOrder,
+                basicText: searchQuery,
+                nsfw: selectedNSFW,
+                name: modName,
+                author: modAuthor,
+                gender: selectedGender,
+                race: modRaces,
+                tags: modTags,
+                affects: modAffects,
+                comments: modComments,
+                dtCompatibility: selectedDTCompat,
+                types: selectedType,
+                page: page
+            );
+
+            Plugin.Logger.Debug(url);
+            searchTask = Task.Run(() => UpdateSearch(url));
+        }
+
+        /// <summary>Largeur réservée aux libellés, pour que les champs s'alignent entre eux.</summary>
+        private const float LabelWidth = 80f;
+
+        /// <summary>
+        /// Champ texte précédé de son libellé.
+        ///
+        /// ImGui place ses libellés à droite du champ par défaut : les panneaux etant figes a
+        /// 200 pixels, "Comments" s'affichait "Commer", "DT Compatibility" devenait "DT Comp" et
+        /// "Sort Order" finissait en "Sort Orde". Le libelle passe a gauche, sur une largeur
+        /// constante, et le champ occupe tout le reste.
+        /// </summary>
+        private static void LabeledInput(string label, ref string value)
+        {
+            ImGui.TextUnformatted(label);
+            ImGui.SameLine(LabelWidth);
+            ImGui.SetNextItemWidth(-1);
+            ImGui.InputText($"##{label}", ref value, 100);
+        }
+
+        private static bool LabeledCombo(string label, ref int index, string[] options)
+        {
+            ImGui.TextUnformatted(label);
+            ImGui.SameLine(LabelWidth);
+            ImGui.SetNextItemWidth(-1);
+            return ImGui.Combo($"##{label}", ref index, options, options.Length);
+        }
+
+        /// <summary>
+        /// Options avancées : deux panneaux de même largeur, puis les types sur toute la largeur.
+        ///
+        /// Les panneaux faisaient auparavant 200 pixels chacun, quelle que soit la taille de la
+        /// fenetre : les libelles etaient tronques et les trois quarts de la place restaient
+        /// vides. Les types, ranges deux par deux, occupaient a eux seuls la hauteur d'un ecran
+        /// et repoussaient les resultats hors de vue.
+        /// </summary>
+        private void DrawAdvancedOptions()
+        {
+            var style = ImGui.GetStyle();
+            var available = ImGui.GetContentRegionAvail().X;
+            var panelWidth = (available - style.ItemSpacing.X) / 2f;
+            var panelHeight = ImGui.GetFrameHeightWithSpacing() * 6f + style.WindowPadding.Y * 2f;
+
+            if (ImGui.BeginChild("searchfilters", new Vector2(panelWidth, panelHeight), true))
+            {
+                LabeledInput("Name", ref modName);
+                LabeledInput("Author", ref modAuthor);
+                LabeledInput("Races", ref modRaces);
+                LabeledInput("Tags", ref modTags);
+                LabeledInput("Affects", ref modAffects);
+                LabeledInput("Comments", ref modComments);
+            }
+            ImGui.EndChild();
+
+            ImGui.SameLine();
+
+            if (ImGui.BeginChild("searchoptions", new Vector2(panelWidth, panelHeight), true))
+            {
+                string[] genderOptions = { "Male", "Female", "Unisex", "Any" };
+                var genderIndex = selectedGender.HasValue ? (int)selectedGender.Value : 3;
+                if (LabeledCombo("Gender", ref genderIndex, genderOptions))
+                    selectedGender = genderIndex < 3 ? (Gender)genderIndex : null;
+
+                string[] dtCompatOptions = { "Compatible", "Tex Tools partial", "Partial Compatibility", "Not compatible" };
+                var dtCompatIndex = (int)selectedDTCompat;
+                LabeledCombo("DT compat", ref dtCompatIndex, dtCompatOptions);
+                selectedDTCompat = (DTCompatibility)dtCompatIndex;
+
+                string[] sortByOptions = { "Relevance", "Release Date", "Name", "Last Version Update", "Views", "Views Today", "Downloads", "Followers" };
+                var sortByIndex = (int)selectedSortBy;
+                LabeledCombo("Sort by", ref sortByIndex, sortByOptions);
+                selectedSortBy = (SortBy)sortByIndex;
+
+                string[] sortOrderOptions = { "Ascending", "Descending" };
+                var sortOrderIndex = (int)selectedSortOrder;
+                LabeledCombo("Order", ref sortOrderIndex, sortOrderOptions);
+                selectedSortOrder = (SortOrder)sortOrderIndex;
+
+                ImGui.Spacing();
+                DrawAdultToggle();
+            }
+            ImGui.EndChild();
+
+            //Les types occupent toute la largeur, repartis sur autant de colonnes qu'il en tient.
+            if (ImGui.BeginChild("searchtypes", new Vector2(0, 0), true))
+            {
+                ImGui.TextDisabled("Types");
+                ImGui.Spacing();
+
+                var columnWidth = 150f;
+                var columns = Math.Max(1, (int)(ImGui.GetContentRegionAvail().X / columnWidth));
+                var index = 0;
+
+                foreach (Types type in Enum.GetValues(typeof(Types)))
+                {
+                    if (index % columns != 0)
+                        ImGui.SameLine(columnWidth * (index % columns));
+
+                    DrawTypeCheckbox(type);
+                    index++;
+                }
+            }
+            ImGui.EndChild();
+        }
+
+        private void DrawAdultToggle()
+        {
+            //La case était désactivée en dur : sans session, XMA répondait 403 sur ces pages et le
+            //filtre n'aurait mené qu'à des erreurs. /anon_login la rend utilisable, mais seulement
+            //si l'utilisateur a donné son accord dans la configuration.
+            var nsfwAllowed = plugin.Configuration.AllowNsfw;
+            var nsfwSelected = nsfwAllowed && selectedNSFW == NSFW.True;
+
+            //"Adult mods only" et non "NSFW" : le filtre de XMA est exclusif, pas additif. Mesure
+            //faite sur le tag bibo+ : 3391 resultats sans le parametre, 1281 avec nsfw=true, sans
+            //recouvrement. Cocher ne complete pas la liste, il la remplace.
+            ImGui.BeginDisabled(!nsfwAllowed);
+            if (ImGui.Checkbox("Adult mods only", ref nsfwSelected))
+                selectedNSFW = nsfwSelected ? NSFW.True : NSFW.False;
+            ImGui.EndDisabled();
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(nsfwAllowed
+                    ? "Replaces the results with adult mods only.\nxivmodarchive cannot mix both in one search."
+                    : "Enable \"Show adult (NSFW) mods\" in the plugin settings first.");
+            }
+
+            //Accord retiré en cours de session : un ancien choix ne doit pas survivre.
+            if (!nsfwAllowed)
+                selectedNSFW = NSFW.False;
         }
 
         public void DrawTypeCheckbox(Types type)
@@ -294,67 +367,29 @@ namespace ModArchiveBrowser.Windows
 
             ImGui.Spacing();
             ImGui.Separator();
-            float windowWidth = ImGui.GetWindowWidth();
-            float buttonWidth = 100;
+            //Pagination centree. Les deux fleches reconstruisaient chacune l'URL complete ;
+            //elles passent maintenant par RunSearch, qui est la seule a la connaitre.
+            ImGui.Spacing();
 
-            float centerOffset = (windowWidth - buttonWidth) * 0.5f;
+            var arrowWidth = ImGui.GetFrameHeight();
+            var pageLabel = $"page {page}";
+            var totalWidth = arrowWidth * 2f + ImGui.CalcTextSize(pageLabel).X + ImGui.GetStyle().ItemSpacing.X * 2f;
+            ImGui.SetCursorPosX((ImGui.GetWindowWidth() - totalWidth) * 0.5f);
 
-            // Set the cursor position to the calculated offset to center the button
-            ImGui.SetCursorPosX(centerOffset);
-            
-            if (page > 1)
+            using (ImRaii.Disabled(page <= 1))
             {
                 if (ImGui.ArrowButton("SearchGoBack", ImGuiDir.Left))
-                {
-                    page = page - 1;
-                    string url = WebClient.BuildSearchURL(
-                        selectedSortBy,
-                        selectedSortOrder,
-                        basicText: searchQuery,
-                        nsfw: selectedNSFW,
-                        name: modName,
-                        author: modAuthor,
-                        gender: selectedGender,
-                        race: modRaces,
-                        tags: modTags,
-                        affects: modAffects,
-                        comments: modComments,
-                        dtCompatibility: selectedDTCompat,
-                        types: selectedType,
-                        page: page
-                    );
-
-                    Plugin.Logger.Debug(url);
-                    searchTask = Task.Run((() => {UpdateSearch(url); }));
-                }
-                ImGui.SameLine();
+                    RunSearch(page - 1);
             }
-            
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(pageLabel);
+            ImGui.SameLine();
+
             if (ImGui.ArrowButton("SearchGoForward", ImGuiDir.Right))
-            {
-                page = page + 1;
-                string url = WebClient.BuildSearchURL(
-                    selectedSortBy,
-                    selectedSortOrder,
-                    basicText: searchQuery,
-                    nsfw: selectedNSFW,
-                    name: modName,
-                    author: modAuthor,
-                    gender: selectedGender,
-                    race: modRaces,
-                    tags: modTags,
-                    affects: modAffects,
-                    comments: modComments,
-                    dtCompatibility: selectedDTCompat,
-                    types: selectedType,
-                    page: page
-                );
-
-                Plugin.Logger.Debug(url);
-                searchTask = Task.Run((() => {UpdateSearch(url); }));
-            }
+                RunSearch(page + 1);
         }
-        
+
         /// <summary>
         /// Jamais appelé : la fenêtre n'est plus ouverte, son contenu est dessiné par la fenêtre
         /// principale via DrawEmbedded. La classe reste un Window pour ne pas defaire le systeme
