@@ -3,6 +3,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility.Raii;
 
 namespace ModArchiveBrowser.Utils
 {
@@ -43,7 +44,7 @@ namespace ModArchiveBrowser.Utils
             ImGui.SameLine();
             Tab(plugin, current, NavTarget.Sponsored, FontAwesomeIcon.Star, "Sponsored", "New and updated mods from Patreon subscribers");
 
-            DrawAdultToggle(plugin);
+            DrawAdultToggle(plugin, current);
         }
 
         /// <summary>
@@ -83,15 +84,21 @@ namespace ModArchiveBrowser.Utils
         /// remplace les resultats au lieu de les completer. Mesure faite sur le tag bibo+, 3391
         /// resultats sans le parametre contre 1281 avec, sans recouvrement.
         /// </summary>
-        private static void DrawAdultToggle(Plugin plugin)
+        private static void DrawAdultToggle(Plugin plugin, NavTarget current)
         {
             var enabled = plugin.Configuration.AllowNsfw;
+
+            //La page d'accueil est la vitrine de XMA, servie telle quelle : elle n'accepte aucun
+            //parametre de recherche, donc aucun filtre. Griser la bascule vaut mieux que la
+            //laisser sans effet, ce qui donnerait l'impression qu'elle est cassee.
+            var applicable = current != NavTarget.Home;
             var icon = enabled ? FontAwesomeIcon.Eye : FontAwesomeIcon.EyeSlash;
             var label = enabled ? "Adult only" : "Adult off";
 
             var width = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
             ImGui.SameLine(ImGui.GetContentRegionMax().X - width);
 
+            using (ImRaii.Disabled(!applicable))
             using (enabled ? Theme.Emphasis(Warm, WarmHovered) : Theme.Emphasis(Neutral, NeutralHovered))
             {
                 if (ImGuiComponents.IconButtonWithText(icon, label))
@@ -100,9 +107,11 @@ namespace ModArchiveBrowser.Utils
 
             if (ImGui.IsItemHovered())
             {
-                ImGui.SetTooltip(enabled
-                    ? "Showing adult mods only.\nxivmodarchive cannot mix adult and regular results in one search."
-                    : "Adult mods are hidden.\nWhile off, xivmodarchive returns 403 for them: they cannot be browsed or installed at all.");
+                ImGui.SetTooltip(!applicable
+                    ? "The homepage is served by xivmodarchive as-is and takes no filter.\nUse Trending, Newest or Search to browse adult mods."
+                    : enabled
+                        ? "Showing adult mods only.\nxivmodarchive cannot mix adult and regular results in one search."
+                        : "Adult mods are hidden.\nWhile off, xivmodarchive returns 403 for them: they cannot be browsed or installed at all.");
             }
         }
 
