@@ -63,7 +63,7 @@ namespace ModArchiveBrowser.Utils
 
         public static bool Draw(string id, ModThumb thumb, IDalamudTextureWrap? texture, float width,
                                 ModAvailability availability = ModAvailability.Unknown,
-                                bool obscure = false)
+                                bool obscure = false, string obscureLabel = "Adult content")
         {
             var style = ImGui.GetStyle();
             var pad = style.FramePadding;
@@ -87,7 +87,7 @@ namespace ModArchiveBrowser.Utils
             DrawShadow(draw, top, bottom, lift);
             draw.AddRectFilled(top, bottom, Blend(0xFF1A1C20u, 0xFF23262Cu, lift), Rounding);
             //Le survol revele : c'est un geste deliberé, contrairement au simple defilement.
-            DrawThumbnail(draw, texture, top, width, imageHeight, obscure && lift < 0.9f);
+            DrawThumbnail(draw, texture, top, width, imageHeight, obscure && lift < 0.9f, obscureLabel);
             DrawScrim(draw, top, width, imageHeight);
             DrawTitle(draw, thumb, top, width, imageHeight, pad);
             DrawBadge(draw, availability, top, width);
@@ -140,7 +140,7 @@ namespace ModArchiveBrowser.Utils
             }
         }
 
-        private static void DrawThumbnail(ImDrawListPtr draw, IDalamudTextureWrap? texture, Vector2 top, float width, float imageHeight, bool obscure = false)
+        private static void DrawThumbnail(ImDrawListPtr draw, IDalamudTextureWrap? texture, Vector2 top, float width, float imageHeight, bool obscure = false, string obscureLabel = "Adult content")
         {
             var imageEnd = top + new Vector2(width, imageHeight);
 
@@ -169,7 +169,7 @@ namespace ModArchiveBrowser.Utils
 
             if (obscure)
             {
-                DrawObscured(draw, texture, top, imageEnd, uv0, uv1, width, imageHeight);
+                DrawObscured(draw, texture, top, imageEnd, uv0, uv1, width, imageHeight, obscureLabel);
                 return;
             }
 
@@ -187,7 +187,7 @@ namespace ModArchiveBrowser.Utils
         /// </summary>
         private static void DrawObscured(ImDrawListPtr draw, IDalamudTextureWrap texture,
                                          Vector2 top, Vector2 end, Vector2 uv0, Vector2 uv1,
-                                         float width, float imageHeight)
+                                         float width, float imageHeight, string label)
         {
             //Pixellisation plutot qu'etalement. La premiere version superposait neuf copies
             //decalees de quelques pixels : bien trop peu pour cacher quoi que ce soit, le sujet
@@ -227,7 +227,6 @@ namespace ModArchiveBrowser.Utils
             //Un voile sombre acheve de casser les contrastes, et porte le libelle.
             draw.AddRectFilled(top, end, 0x66000000u, Rounding, ImDrawFlags.RoundCornersTop);
 
-            const string label = "Adult content";
             var size = ImGui.CalcTextSize(label);
             var position = top + new Vector2((width - size.X) / 2f, (imageHeight - size.Y) / 2f);
 

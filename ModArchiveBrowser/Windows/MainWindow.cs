@@ -130,7 +130,10 @@ public class MainWindow : Window, IDisposable
             var availability = AvailabilityIndex.Get(plugin.Configuration, thumb.url);
 
             if (ModGrid.Draw($"##homecard{i}", thumb, texture, cardWidth, availability,
-                obscure: plugin.Configuration.BlurAdultThumbnails && AvailabilityIndex.IsAdult(plugin.Configuration, thumb.url)))
+                //Le masquage total prime : il couvre les mods dont l'auteur n'a pas declare la nudite.
+                obscure: plugin.Configuration.ObscureAllThumbnails
+                         || (plugin.Configuration.BlurAdultThumbnails && AvailabilityIndex.IsAdult(plugin.Configuration, thumb.url)),
+                obscureLabel: plugin.Configuration.ObscureAllThumbnails ? "Hidden" : "Adult content"))
             {
                 try
                 {

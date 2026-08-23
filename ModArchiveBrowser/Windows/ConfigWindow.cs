@@ -136,6 +136,21 @@ public class ConfigWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Adult mods stay in the results, but their preview is smeared over\nuntil you hover the card.");
 
+        var obscureAll = Configuration.ObscureAllThumbnails;
+        if (ImGui.Checkbox("Obscure every thumbnail", ref obscureAll))
+        {
+            Configuration.ObscureAllThumbnails = obscureAll;
+            Configuration.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "The adult marker comes from the mod author, who is not required to set it.\n" +
+                "Obscuring only what is declared therefore misses whatever was not.\n" +
+                "This hides every preview until hovered, which cannot miss anything.");
+        }
+
         ImGui.Separator();
 
         var cacheSize = Configuration.CacheSize;

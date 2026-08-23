@@ -55,6 +55,18 @@ public class Configuration : IPluginConfiguration
     /// </summary>
     public bool BlurAdultThumbnails { get; set; } = true;
 
+    /// <summary>
+    /// Masque toutes les vignettes, sans distinction.
+    ///
+    /// Le marqueur adulte de XMA vient de l'auteur du mod : rien ne l'oblige a le renseigner, et
+    /// beaucoup ne le font pas. Un masquage selectif laisse donc passer ce qui n'a pas ete
+    /// declare, et donne une assurance qu'il ne peut pas tenir. Aucune detection ne comblera ce
+    /// trou — ni les tags, ni le type, ni le champ "Affects" ne garantissent quoi que ce soit.
+    ///
+    /// Tout masquer est la seule regle qui ne puisse pas rater. Le survol revele au cas par cas.
+    /// </summary>
+    public bool ObscureAllThumbnails { get; set; } = false;
+
     // the below exist just to make saving less cumbersome
     public void Save()
     {
