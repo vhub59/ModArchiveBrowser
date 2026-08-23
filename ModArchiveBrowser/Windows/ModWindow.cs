@@ -173,6 +173,78 @@ namespace ModArchiveBrowser.Windows
         }
 
         /// <summary>
+        /// Collection dans laquelle activer le mod une fois installe.
+        ///
+        /// Penumbra n'installe pas "dans" une collection : le mod arrive dans le dossier commun, et
+        /// chaque collection decide seulement s'il est actif. Sans ce reglage il fallait donc
+        /// ouvrir Penumbra apres chaque installation pour cocher le mod — le geste que ce plugin
+        /// existe pour eviter.
+        ///
+        /// "Don't enable" reste le choix par defaut : c'est ce que faisait le plugin jusqu'ici, et
+        /// activer un mod a l'insu de l'utilisateur change ce qu'il voit en jeu.
+        /// </summary>
+        private void DrawCollectionChoice()
+        {
+            if (!plugin.penumbra.Available)
+                return;
+
+            //Relu a chaque frame plutot que mis en cache : les collections se creent et se
+            //renomment dans Penumbra pendant que cette fenetre est ouverte. L'appel ne traverse
+            //qu'une IPC en memoire.
+            var collections = plugin.penumbra.GetCollections();
+            if (collections.Count == 0)
+                return;
+
+            var chosen = plugin.Configuration.InstallCollection;
+            var current = collections.FirstOrDefault(c => c.Id.ToString() == chosen);
+
+            //La collection retenue peut avoir ete supprimee depuis : on retombe alors sur
+            //"Don't enable" plutot que d'afficher un identifiant orphelin.
+            var label = current.Name ?? "Don't enable";
+
+            ImGui.Spacing();
+            ImGui.TextDisabled("Enable in");
+            ImGui.SetNextItemWidth(-1);
+
+            using (var combo = ImRaii.Combo("##installcollection", label))
+            {
+                if (combo)
+                {
+                    if (ImGui.Selectable("Don't enable", string.IsNullOrEmpty(chosen)))
+                        Remember(string.Empty);
+
+                    ImGui.Separator();
+
+                    //Les collections portent des noms libres, souvent opaques vues d'ici. On
+                    //signale celle qui est assignee au personnage du joueur : c'est presque
+                    //toujours celle qu'on veut, et rien d'autre dans la liste ne le dit.
+                    var yours = plugin.penumbra.YourCollection()?.Id;
+
+                    foreach (var collection in collections)
+                    {
+                        var id = collection.Id.ToString();
+                        var name = collection.Id == yours ? $"{collection.Name}  (yours)" : collection.Name;
+
+                        if (ImGui.Selectable($"{name}##{id}", id == chosen))
+                            Remember(id);
+                    }
+                }
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(
+                    "Penumbra installs mods into one shared folder; a collection only decides\n" +
+                    "whether a mod is switched on. Pick one to have it enabled right after install,\n" +
+                    "instead of opening Penumbra to tick it yourself.");
+
+            void Remember(string id)
+            {
+                plugin.Configuration.InstallCollection = id;
+                plugin.Configuration.Save();
+            }
+        }
+
+        /// <summary>
         /// Historique des versions publiees, avec leurs notes.
         ///
         /// XMA le sert par son endpoint /api/mod/update_history, celui-la meme que sa page
@@ -395,12 +467,37 @@ namespace ModArchiveBrowser.Windows
             ImGui.SameLine(); // Ensure links are inline
         }
 
+        /// <summary>
+        /// Collection retenue pour l'activation, ou null s'il n'y en a pas.
+        ///
+        /// La collection est verifiee contre celles qui existent : celle enregistree la session
+        /// derniere peut avoir ete supprimee dans Penumbra depuis, et l'activation echouerait
+        /// alors sans que l'utilisateur comprenne pourquoi.
+        /// </summary>
+        private Guid? ChosenCollection()
+        {
+            if (!plugin.penumbra.Available)
+                return null;
+
+            if (!Guid.TryParse(plugin.Configuration.InstallCollection, out var id))
+                return null;
+
+            return plugin.penumbra.GetCollections().Any(c => c.Id == id) ? id : null;
+        }
+
         private void StartInstall()
         {
             //Un second clic pendant un telechargement lancait une deuxieme tache sur le meme mod.
             //Constate en test : le message d'erreur est apparu deux fois pour un seul mod.
             if (_isLoading)
                 return;
+
+            //L'attente est armee avant le telechargement et non apres l'installation : Penumbra
+            //annonce le mod par ModAdded des qu'il l'a depaquete, ce qui peut arriver avant que
+            //InstallMod nous ait rendu la main.
+            var collection = ChosenCollection();
+            if (collection.HasValue)
+                plugin.penumbra.EnableComingInstalls(collection.Value);
 
             _isLoading = true;
             Task.Run(() =>
@@ -413,6 +510,12 @@ namespace ModArchiveBrowser.Windows
             }).ContinueWith(task =>
             {
                 _isLoading = false;
+
+                //Rien n'est arrive : une attente laissee ouverte attraperait le prochain mod que
+                //l'utilisateur installerait lui-meme.
+                if (task.IsFaulted)
+                    plugin.penumbra.CancelComingInstalls();
+
                 //Le bouton doit passer a "Already installed" sans attendre un changement de mod.
                 RefreshInstalledState();
             });
@@ -612,6 +715,8 @@ namespace ModArchiveBrowser.Windows
                 {
                     Process.Start(new ProcessStartInfo(WebClient.xivmodarchiveRoot + mod.Value.modThumb.url) { UseShellExecute = true });
                 }
+
+                DrawCollectionChoice();
 
                 ImGui.Separator();
 

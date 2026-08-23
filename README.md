@@ -35,6 +35,8 @@ This is a 3rd party plugin. If you are having problems with it, open an issue on
   Penumbra records where each mod came from, so the check costs one request per installed mod
   rather than crawling the whole site
 - **Version history** with the author's patch notes, so an update is not a leap in the dark
+- **Enable in a collection on install**, so you do not have to open Penumbra and tick the mod
+  yourself. Off by default — a mod installs the way it always did until you pick a collection
 - **Availability badges** on the grid: whether a mod can be installed from here is known before
   you click, not after — and one button hides what is known to be out of reach
 - **The whole catalogue**, not the slice the site returns by default: asking for no mod type gets

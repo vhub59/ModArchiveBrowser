@@ -27,7 +27,15 @@ namespace ModArchiveBrowser.Interop.Penumbra
         private global::Penumbra.Api.IpcSubscribers.GetModDirectory? _getModDirectory;
         private global::Penumbra.Api.IpcSubscribers.OpenMainWindow? _openModPage;
         private global::Penumbra.Api.IpcSubscribers.InstallMod? _installMod;
+        private global::Penumbra.Api.IpcSubscribers.GetCollections? _getCollections;
+        private global::Penumbra.Api.IpcSubscribers.GetCollection? _getCollection;
+        private global::Penumbra.Api.IpcSubscribers.TrySetMod? _trySetMod;
+        private EventSubscriber<string>? _modAdded;
         private EventSubscriber<string, float, float>? _preSettingsTabBarDraw;
+
+        //Collection dans laquelle activer les mods qui vont arriver, et jusqu'a quand.
+        private Guid? _pendingCollection;
+        private DateTime _pendingUntil;
 
         private readonly IDisposable _initializedEvent;
         private readonly IDisposable _disposedEvent;
@@ -45,6 +53,120 @@ namespace ModArchiveBrowser.Interop.Penumbra
             _windowIntegration = new PenumbraWindowIntegration(plugin);
             _preSettingsTabBarDraw = global::Penumbra.Api.IpcSubscribers.PreSettingsTabBarDraw.Subscriber(pi,_windowIntegration.PreSettingsTabBarDraw);
             Reattach();
+        }
+
+        /// <summary>Une collection de Penumbra : son identifiant et le nom que l'utilisateur lui a donne.</summary>
+        public readonly record struct PenumbraCollection(Guid Id, string Name);
+
+        /// <summary>
+        /// Collections existantes, par ordre alphabetique.
+        ///
+        /// La collection vide en est exclue par Penumbra lui-meme, ce qui tombe bien : y activer
+        /// un mod n'aurait aucun effet.
+        /// </summary>
+        public IReadOnlyList<PenumbraCollection> GetCollections()
+        {
+            if (!Available)
+                return Array.Empty<PenumbraCollection>();
+
+            try
+            {
+                return _getCollections!.Invoke()
+                    .Select(pair => new PenumbraCollection(pair.Key, pair.Value))
+                    .OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.Debug($"Could not read Penumbra collections:\n{ex}");
+                return Array.Empty<PenumbraCollection>();
+            }
+        }
+
+        /// <summary>
+        /// Collection assignee au personnage du joueur, s'il y en a une.
+        ///
+        /// Sert de proposition par defaut : c'est celle qui s'applique a soi-meme, donc celle
+        /// qu'on veut dans l'immense majorite des cas.
+        /// </summary>
+        public PenumbraCollection? YourCollection()
+        {
+            if (!Available)
+                return null;
+
+            try
+            {
+                var current = _getCollection!.Invoke(ApiCollectionType.Yourself);
+                return current == null ? null : new PenumbraCollection(current.Value.Id, current.Value.Name);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.Debug($"Could not read the current collection:\n{ex}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Demande que les mods installes dans les deux prochaines minutes soient actives dans
+        /// cette collection.
+        ///
+        /// Penumbra n'installe pas "dans" une collection : un mod arrive dans le dossier commun,
+        /// et chaque collection decide seulement s'il est actif. InstallMod ne rend d'ailleurs pas
+        /// la main sur le mod cree — il ne fait que le mettre en file — et le nom du dossier n'est
+        /// connu que lorsque l'evenement ModAdded le livre.
+        ///
+        /// D'ou cette attente plutot qu'un appel direct. Elle vaut pour toute la fenetre et non
+        /// pour le premier mod venu : une archive XMA peut contenir plusieurs modpacks, que
+        /// ModHandler installe l'un apres l'autre. Le risque est d'attraper au passage un mod que
+        /// l'utilisateur installerait lui-meme dans le meme intervalle ; il serait alors active
+        /// dans la collection qu'il vient de choisir ici, ce qui reste sans dommage.
+        /// </summary>
+        public void EnableComingInstalls(Guid collection)
+        {
+            _pendingCollection = collection;
+            _pendingUntil = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+        }
+
+        /// <summary>Annule l'attente, quand l'installation n'a pas eu lieu.</summary>
+        public void CancelComingInstalls()
+        {
+            _pendingCollection = null;
+        }
+
+        /// <summary>Nom du dernier mod active par ce biais, pour que l'interface puisse le dire.</summary>
+        public string? LastEnabled { get; private set; }
+
+        private void OnModAdded(string modDirectory)
+        {
+            if (_pendingCollection is not { } collection)
+                return;
+
+            if (DateTime.UtcNow > _pendingUntil)
+            {
+                _pendingCollection = null;
+                return;
+            }
+
+            try
+            {
+                //Le troisieme argument porte le nom "inherit" dans l'enveloppe IPC, mais il occupe
+                //la place du parametre "enabled" de TrySetMod(collectionId, modDirectory, modName,
+                //enabled) : c'est bien l'activation qu'il commande. Verifie par reflexion sur les
+                //deux signatures, l'erreur passerait sinon la compilation sans un mot.
+                //
+                //Le nom du mod reste vide : le dossier suffit a l'identifier, et c'est la seule
+                //des deux formes que ModAdded nous donne.
+                var result = _trySetMod!.Invoke(collection, modDirectory, true, string.Empty);
+
+                if (result is PenumbraApiEc.Success or PenumbraApiEc.NothingChanged)
+                    LastEnabled = modDirectory;
+                else
+                    Plugin.Logger.Warning($"Could not enable \"{modDirectory}\" in the chosen collection: {result}.");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.Debug($"Could not enable \"{modDirectory}\":\n{ex}");
+            }
         }
 
         public PenumbraApiEc InstallMod(in string path)
@@ -228,6 +350,13 @@ namespace ModArchiveBrowser.Interop.Penumbra
                 _getModDirectory = new global::Penumbra.Api.IpcSubscribers.GetModDirectory(_pluginInterface);
                 _openModPage = new global::Penumbra.Api.IpcSubscribers.OpenMainWindow(_pluginInterface);
                 _installMod = new global::Penumbra.Api.IpcSubscribers.InstallMod(_pluginInterface);
+                _getCollections = new global::Penumbra.Api.IpcSubscribers.GetCollections(_pluginInterface);
+                _getCollection = new global::Penumbra.Api.IpcSubscribers.GetCollection(_pluginInterface);
+                _trySetMod = new global::Penumbra.Api.IpcSubscribers.TrySetMod(_pluginInterface);
+
+                //Seul moyen d'apprendre le nom du dossier d'un mod qu'on vient de faire installer :
+                //InstallMod se contente de le mettre en file et ne rend rien.
+                _modAdded = global::Penumbra.Api.IpcSubscribers.ModAdded.Subscriber(_pluginInterface, OnModAdded);
                 //_preSettingsTabBarDraw = global::Penumbra.Api.IpcSubscribers.PreSettingsTabBarDraw.Subscriber(_pluginInterface, _windowIntegration.PreSettingsTabBarDraw);
                 Available = true;
                 Plugin.Logger.Debug("modarchivebrowser attached to Penumbra.");
@@ -248,6 +377,17 @@ namespace ModArchiveBrowser.Interop.Penumbra
                 _installMod = null;
                 _getMods = null;
                 _getModDirectory = null;
+                _getCollections = null;
+                _getCollection = null;
+                _trySetMod = null;
+
+                _modAdded?.Dispose();
+                _modAdded = null;
+
+                //Une attente survivant au detachement s'appliquerait a la reconnexion suivante,
+                //bien apres l'installation qui l'avait armee.
+                _pendingCollection = null;
+
                 Available = false;
                 //_preSettingsTabBarDraw?.Dispose();
                 Plugin.Logger.Debug("modarchivebrowser detached from Penumbra.");

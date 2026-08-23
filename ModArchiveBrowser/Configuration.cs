@@ -80,6 +80,19 @@ public class Configuration : IPluginConfiguration
     /// </summary>
     public bool HideUnavailable { get; set; } = false;
 
+    /// <summary>
+    /// Collection de Penumbra dans laquelle activer les mods installes d'ici, sous forme de GUID.
+    /// Vide : on installe sans rien activer, ce qui reste le comportement par defaut.
+    ///
+    /// Un mod ne s'installe pas "dans" une collection — il arrive dans le dossier commun, et
+    /// chaque collection decide seulement s'il est actif. Le reglage est donc bien "activer dans",
+    /// et non "installer vers".
+    ///
+    /// Stocke en chaine plutot qu'en Guid : la configuration est serialisee en JSON et relue au
+    /// demarrage suivant, ou la collection choisie peut avoir ete supprimee entre-temps.
+    /// </summary>
+    public string InstallCollection { get; set; } = string.Empty;
+
     // the below exist just to make saving less cumbersome
     public void Save()
     {

@@ -246,6 +246,13 @@ namespace ModArchiveBrowser.Windows
             //sans cette remise a zero, remplir un champ puis chercher renvoyait la liste de
             //l'onglet courant, inchangee — "Trending today, 60 532 mods" quel que soit l'auteur.
             presetUrl = null;
+
+            //La vue suit ce qu'elle montre. Le prereglage abandonne, les resultats ne sont plus
+            //ceux de Trending ni de Newest ; sans ce changement, la ligne de contexte continuait
+            //d'annoncer "Trending today" au-dessus d'une recherche par auteur, et l'onglet de
+            //l'ancien prereglage restait surligne comme si l'on ne l'avait jamais quitte.
+            plugin.MainWindow.CurrentTarget = NavTarget.Search;
+
             RunSearch(1);
         }
 
