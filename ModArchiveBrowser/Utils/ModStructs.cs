@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -126,7 +126,10 @@ namespace ModArchiveBrowser.Utils
     {
         Rank,
         Time_posted,
-        Name,
+        //Le site attend "name_slug" : envoyer "name" etait ignore et retombait sur le tri par
+        //defaut, si bien que trier par nom ne faisait rien. Le nom du membre sert de valeur,
+        //BuildSearchURL faisant ToString().ToLower().
+        Name_slug,
         Time_edited,
         Views,
         Views_today,

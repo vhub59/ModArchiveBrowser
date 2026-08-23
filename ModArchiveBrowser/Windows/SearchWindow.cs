@@ -23,6 +23,8 @@ namespace ModArchiveBrowser.Windows
         private SortOrder selectedSortOrder = SortOrder.Desc;
         private Gender? selectedGender = null;
         private NSFW selectedNSFW = NSFW.False;
+        //14 897 mods sur 52 114 : filtre reel, jusqu'ici accessible par le seul onglet Sponsored.
+        private bool sponsoredOnly = false;
         private DTCompatibility selectedDTCompat = DTCompatibility.TexToolsCompatible;
         private HashSet<Types> selectedType = new HashSet<Types>();
         private Plugin plugin;
@@ -341,7 +343,16 @@ namespace ModArchiveBrowser.Windows
                 if (LabeledCombo("Gender", ref genderIndex, genderOptions))
                     selectedGender = genderIndex < 3 ? (Gender)genderIndex : null;
 
-                string[] dtCompatOptions = { "Compatible", "Tex Tools partial", "Partial Compatibility", "Not compatible" };
+                //Seuils et non categories : les totaux sont cumulatifs (36 376 / 52 114 / 52 848
+                /// 54 731). L'ancien libelle "Not compatible" laissait croire qu'on filtrait les
+                //mods casses, alors qu'il affichait le catalogue entier.
+                string[] dtCompatOptions =
+                {
+                    "Dawntrail ready",
+                    "+ TexTools fixable",
+                    "+ partially working",
+                    "Everything, incl. broken",
+                };
                 var dtCompatIndex = (int)selectedDTCompat;
                 LabeledCombo("DT compat", ref dtCompatIndex, dtCompatOptions);
                 selectedDTCompat = (DTCompatibility)dtCompatIndex;
@@ -357,6 +368,10 @@ namespace ModArchiveBrowser.Windows
                 selectedSortOrder = (SortOrder)sortOrderIndex;
 
                 ImGui.Spacing();
+                ImGui.Checkbox("Sponsored only", ref sponsoredOnly);
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Mods from Patreon subscribers.\n14,897 of the 52,114 Dawntrail-compatible mods.");
+
                 DrawAdultToggle();
             }
             ImGui.EndChild();
