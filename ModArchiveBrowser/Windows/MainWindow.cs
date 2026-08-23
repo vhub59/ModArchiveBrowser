@@ -35,7 +35,6 @@ public class MainWindow : Window, IDisposable
     // but for ImGui the ID is "My Amazing Window##With a hidden ID"
     private Task refreshTask = null;
     ConcurrentDictionary<string,ISharedImmediateTexture> images = new ConcurrentDictionary<string, ISharedImmediateTexture>();
-    ConcurrentDictionary<string,Task> imagesTasks = new ConcurrentDictionary<string,Task>();
     public MainWindow(Plugin plugin)
         : base("XIV Mod Archive Browser##modarchivebrowserhome")
     {
@@ -62,16 +61,14 @@ public class MainWindow : Window, IDisposable
 
     private async void RebuildSharedTextures()
     {
-        imagesTasks.Clear();
         foreach (ModThumb modThumb in modThumbs)
         {
-            Task thumbnailTask = Task.Run((async () =>
+            _ = Task.Run((async () =>
                                               {
                                                   string path = await plugin.imageHandler.DownloadImage(modThumb.url_thumb);
                                                   ISharedImmediateTexture sharedTexture = Plugin.TextureProvider.GetFromFile(path);
                                                   images.TryAdd(modThumb.url_thumb, sharedTexture);
                                               }));
-            imagesTasks.TryAdd(modThumb.url_thumb, thumbnailTask);
         }
     }
     /// <summary>Vue affichée par la fenêtre. Les onglets la changent sur place.</summary>

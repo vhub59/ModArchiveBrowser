@@ -167,11 +167,18 @@ public class ConfigWindow : Window, IDisposable
             _openFileDialog = true;
         }
         ImGui.Separator();
-        /*if(ImGui.InputInt("Cache Size", ref cacheSize))
+
+        //Ce champ etait commente et le reglage sans effet. Il pilote desormais la purge du cache
+        //de mods au demarrage, qui n'etait borne par rien : 532 Mo apres une seule journee.
+        if (ImGui.InputInt("Mod cache limit (MB)", ref cacheSize))
         {
-            Configuration.CacheSize = cacheSize;
+            Configuration.CacheSize = Math.Max(0, cacheSize);
             Configuration.Save();
-        }*/
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Downloaded mods are kept to avoid re-downloading them.\nBeyond this size, the least recently used ones are removed. 0 disables the limit.");
+
         var modCachePath = Configuration.CacheModPath;
         if (ImGui.InputText("Mod cache path",ref modCachePath,300))
         {

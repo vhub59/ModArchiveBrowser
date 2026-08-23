@@ -81,16 +81,6 @@ namespace ModArchiveBrowser
         }
 
         /// <summary>
-        /// À appeler sur un 403 : la session a expiré (le cookie vit un an) ou n'a jamais été posée.
-        /// Le prochain appel à EnsureAsync la rétablira.
-        /// </summary>
-        public static void Invalidate()
-        {
-            _established = false;
-            Plugin.Logger.Debug("XMA session invalidated, will reopen on next request.");
-        }
-
-        /// <summary>
         /// Ferme la session et jette le cookie. Appelé quand l'utilisateur retire son accord
         /// pour le contenu NSFW : XMA redevient alors incapable de servir ces pages, ce qui vaut
         /// mieux qu'un simple filtre d'affichage côté plugin.
@@ -110,15 +100,5 @@ namespace ModArchiveBrowser
         /// <summary>Vrai si la session anonyme est ouverte.</summary>
         public static bool IsEstablished => _established;
 
-        /// <summary>En-tête Cookie pour les couches qui ne savent pas manipuler un CookieContainer.</summary>
-        public static string CookieHeader()
-        {
-            var jar = Cookies.GetCookies(new Uri(Root));
-            var parts = new System.Collections.Generic.List<string>();
-            foreach (Cookie c in jar)
-                parts.Add($"{c.Name}={c.Value}");
-
-            return string.Join("; ", parts);
-        }
     }
 }

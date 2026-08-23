@@ -62,7 +62,6 @@ namespace ModArchiveBrowser.Windows
         private Task searchTask = null;
         private List<ModThumb> modThumbs = new List<ModThumb>();
         ConcurrentDictionary<string, ISharedImmediateTexture> images = new ConcurrentDictionary<string, ISharedImmediateTexture>();
-        ConcurrentDictionary<string,Task> imagesTasks = new ConcurrentDictionary<string,Task>();
         public SearchWindow(Plugin plugin)
         : base("XIV Mod Archive Search##modarchivebrowsersearch")
         {
@@ -103,16 +102,14 @@ namespace ModArchiveBrowser.Windows
 
         private void RebuildSharedTextures()
         {
-            imagesTasks.Clear();
             foreach (ModThumb modThumb in modThumbs)
             {
-                Task thumbnailTask = Task.Run((async () =>
+                _ = Task.Run((async () =>
                                                   {
                                                       string path = await plugin.imageHandler.DownloadImage(modThumb.url_thumb);
                                                       ISharedImmediateTexture sharedTexture = Plugin.TextureProvider.GetFromFile(path);
                                                       images.TryAdd(modThumb.url_thumb, sharedTexture);
                                                   }));
-                imagesTasks.TryAdd(modThumb.url_thumb, thumbnailTask);
             }
         }
 
