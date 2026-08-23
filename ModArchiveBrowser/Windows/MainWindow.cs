@@ -6,12 +6,12 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using System.Net.Http;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using HtmlAgilityPack;
 using Dalamud.Interface.Textures;
 using System.Net.Http.Headers;
 using Dalamud.Utility;
-using ImGuizmoNET;
+using Dalamud.Bindings.ImGuizmo;
 using System.Drawing.Text;
 using System.Linq;
 using ModArchiveBrowser.Utils;
@@ -119,7 +119,7 @@ public class MainWindow : Window, IDisposable
                     var modThumbnail = images[thumb.url_thumb].GetWrapOrDefault();
                     if (modThumbnail != null)
                     {
-                        if (ImGui.ImageButton(modThumbnail.ImGuiHandle,
+                        if (ImGui.ImageButton(modThumbnail.Handle,
                                               new Vector2(modThumbnail.Width, modThumbnail.Height)))
                         {
                             try

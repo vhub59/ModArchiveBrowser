@@ -28,7 +28,13 @@ namespace ModArchiveBrowser
                     clientInstance = new HtmlWeb();
                     clientInstance.CachePath = Path.Combine(System.IO.Path.GetTempPath(), "modarchivebrowser\\htmlcache");
                     clientInstance.UsingCache = true;
-                    clientInstance.UserAgent = "DalamudPluginModBrowser";
+                    clientInstance.UserAgent = XmaSession.UserAgent;
+                    //Sans le cookie de session,toute page NSFW repond 403.
+                    clientInstance.PreRequest = request =>
+                    {
+                        request.CookieContainer = XmaSession.CookieJar;
+                        return true;
+                    };
                     return clientInstance;
                 }
                 else
@@ -36,6 +42,30 @@ namespace ModArchiveBrowser
                     return clientInstance;
                 }
             }
+        }
+
+        //XMA change sa mise en page sans prevenir.Plutot que de planter sur un index hors bornes,
+        //on retombe sur une valeur de repli et on trace le selecteur fautif dans le log.
+        private static string FirstText(HtmlNodeCollection? nodes, string fallback, string champ)
+        {
+            if (nodes == null || nodes.Count == 0)
+            {
+                Plugin.Logger.Warning($"Selecteur casse pour le champ '{champ}' : XMA a probablement change son HTML.");
+                return fallback;
+            }
+
+            return HtmlEntity.DeEntitize(nodes[0].InnerText).Trim();
+        }
+
+        private static string FirstAttr(HtmlNodeCollection? nodes, string attribut, string fallback, string champ)
+        {
+            if (nodes == null || nodes.Count == 0)
+            {
+                Plugin.Logger.Warning($"Selecteur casse pour le champ '{champ}' : XMA a probablement change son HTML.");
+                return fallback;
+            }
+
+            return nodes[0].GetAttributeValue(attribut, fallback);
         }
 
         public static List<ModThumb> GetHomePageMods()
@@ -86,14 +116,16 @@ namespace ModArchiveBrowser
             HtmlNodeCollection imageNode = page.DocumentNode.SelectNodes("//img[contains(@class, 'mod-carousel-image')]/@src");
             HtmlNodeCollection authorNode = page.DocumentNode.SelectNodes("//a[contains(@class, 'user-card-link')]");
             HtmlNodeCollection typeNodes = page.DocumentNode.SelectNodes("//div[contains(@class, 'col-8')]//p[contains(@class, 'lead')]");
-            HtmlNodeCollection genderNodes = page.DocumentNode.SelectNodes("/html/body/div[2]/div[2]/div[2]/div[1]/div[3]/div[6]/code/a");
-            HtmlNodeCollection viewsNodes = page.DocumentNode.SelectNodes("/html/body/div[2]/div[2]/div[2]/div[1]/div[3]/div[1]/div/span[1]/div/span[2]");
-            title = titleNode[0].InnerText;
-            thumbUrl = imageNode[0].GetAttributeValue("src", "none");
-            authorName = authorNode[0].InnerText;
-            type = typeNodes[0].InnerText;
-            gender = genderNodes[0].InnerText;
-            views = viewsNodes[0].InnerText;
+            //Ces deux la etaient des XPath absolus positionnels,casses par une refonte du site.
+            //On reprend le motif par classe utilise pour les races et les tags,qui lui a tenu.
+            HtmlNodeCollection genderNodes = page.DocumentNode.SelectNodes("//div[contains(@class, 'mod-meta-block')]//code[contains(@class, 'text-light')]//a[contains(@href, '/search?genders=')]");
+            HtmlNodeCollection viewsNodes = page.DocumentNode.SelectNodes("//span[contains(@class, 'emoji-block') and contains(@title, 'Views')]//span[contains(@class, 'count')]");
+            title = FirstText(titleNode, "Sans titre", "titre");
+            thumbUrl = FirstAttr(imageNode, "src", "none", "vignette");
+            authorName = FirstText(authorNode, "Inconnu", "auteur");
+            type = FirstText(typeNodes, "", "type");
+            gender = FirstText(genderNodes, "", "genre");
+            views = FirstText(viewsNodes, "0", "vues");
             return new ModThumb(title, url, authorName,thumbUrl,"none",type,gender,views);
 
 

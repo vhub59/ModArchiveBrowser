@@ -1,4 +1,4 @@
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -101,7 +101,7 @@ namespace ModArchiveBrowser.Utils
                 });
             }
 
-            ImGui.Image(wrap.ImGuiHandle, new Vector2(width, height));
+            ImGui.Image(wrap.Handle, new Vector2(width, height));
         }
 
         /// <summary>

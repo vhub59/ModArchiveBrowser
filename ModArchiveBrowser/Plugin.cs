@@ -42,6 +42,10 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
+        //Ouvre la session anonyme XMA en tache de fond.Sans elle,toute page NSFW repond 403.
+        //On ne bloque pas le chargement du plugin : la session sera prete avant la premiere recherche.
+        _ = XmaSession.EnsureAsync();
+
         // you might normally want to embed resources and load them from the manifest stream
         //var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");
         imageHandler = new ImageHandler(Configuration.CacheImagePath);

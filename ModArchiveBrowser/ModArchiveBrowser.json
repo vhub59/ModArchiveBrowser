@@ -2,7 +2,7 @@
     "Author": "Noevain",
     "Name": "XIV Mod Archive Browser",
     "InternalName": "ModArchiveBrowser",
-    "AssemblyVersion": "0.5.0",
+    "AssemblyVersion": "0.8.0",
     "Description": "Lets you browse and install mods in 1 click from www.xivmodarchive.com and add the modthumbnail in Penumbra",
     "ApplicableVersion": "any",
     "Tags": [
@@ -10,7 +10,7 @@
         "plugin",
         "mods"
     ],
-    "DalamudApiLevel": 10,
+    "DalamudApiLevel": 15,
     "LoadRequiredState": 0,
     "IconUrl": "https://raw.githubusercontent.com/noevain/ModArchiveBrowser/master/images/icon.png",
     "LoadSync": false,

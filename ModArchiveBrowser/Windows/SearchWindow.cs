@@ -8,7 +8,7 @@ using Dalamud.Interface.Internal;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using ModArchiveBrowser.Utils;
 using Dalamud.Interface.Textures;
 using System.Collections.Concurrent;
@@ -213,7 +213,7 @@ namespace ModArchiveBrowser.Windows
                     var modThumbnail = images[thumb.url_thumb].GetWrapOrDefault();
                     if (modThumbnail != null)
                     {
-                        if (ImGui.ImageButton(modThumbnail.ImGuiHandle,
+                        if (ImGui.ImageButton(modThumbnail.Handle,
                                               new Vector2(modThumbnail.Width, modThumbnail.Height)))
                         {
                             try

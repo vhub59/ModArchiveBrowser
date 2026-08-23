@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Numerics;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures.TextureWraps;
 using static FFXIVClientStructs.FFXIV.Client.UI.Misc.GroupPoseModule;
 
@@ -34,7 +34,7 @@ namespace ModArchiveBrowser.Interop.Penumbra
                     var thumb = plugin.modHandler._thumbnailToTextures[moddir].GetWrapOrDefault();
                 if (thumb != null)
                     {
-                    //ImGui.Image(thumb.ImGuiHandle, new Vector2(thumb.Width, thumb.Height));
+                    //ImGui.Image(thumb.Handle, new Vector2(thumb.Width, thumb.Height));
                     Utils.StaticHelpers.ImageFullWidth(thumb, 0, true);
                 }
                 }

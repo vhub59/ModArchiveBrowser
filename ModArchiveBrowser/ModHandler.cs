@@ -29,8 +29,9 @@ namespace ModArchiveBrowser
         {
             _downloadDirectory = downloadDirectory;
             _thumbnailDirectory = thumbnailsDirectory;
-            _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "DalamudPluginModBrowser");
+            //Le meme conteneur de cookies que le parsing : sans lui,les fichiers NSFW repondent 403.
+            _httpClient = new HttpClient(XmaSession.CreateHandler());
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", XmaSession.UserAgent);
             _downloadedFilenames = plugin.Configuration.CacheFiles;
             _modNameToThumbnail = plugin.Configuration.modNameToThumbnail;
             this.plugin = plugin;

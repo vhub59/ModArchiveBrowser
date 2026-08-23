@@ -8,7 +8,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Interface.Internal;
 using Dalamud.Interface.Utility;
 using Dalamud.Plugin.Services;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using Penumbra.Api.IpcSubscribers;
 using Penumbra.Api.Enums;
 using Dalamud.Utility;
@@ -201,7 +201,7 @@ namespace ModArchiveBrowser.Windows
                 var modThumbnail = Plugin.TextureProvider.GetFromFile(plugin.imageHandler.GetImage(mod.Value.modThumb.url_thumb)).GetWrapOrDefault();
                 if (modThumbnail != null)
                 {
-                    ImGui.Image(modThumbnail.ImGuiHandle, new Vector2(300, 200)); // Placeholder for image carousel
+                    ImGui.Image(modThumbnail.Handle, new Vector2(300, 200)); // Placeholder for image carousel
                 }
                 else
                 {
@@ -230,7 +230,7 @@ namespace ModArchiveBrowser.Windows
                         var authorpicThumbnail = Plugin.TextureProvider.GetFromFile(authorpicpath).GetWrapOrDefault();
                         if (authorpicThumbnail != null)
                         {
-                            ImGui.Image(authorpicThumbnail.ImGuiHandle, new Vector2(100, 100));
+                            ImGui.Image(authorpicThumbnail.Handle, new Vector2(100, 100));
                         }
                         else
                         {
