@@ -193,6 +193,12 @@ namespace ModArchiveBrowser.Windows
             //Le libelle du champ ("Search for mods...") s'affichait a sa droite, colle au bouton
             //Search : on ne savait plus lequel des deux appartenait a quoi. Il devient un texte
             //d'invite a l'interieur du champ, et la touche Entree lance la recherche.
+            //
+            //Le bouton porte un identifiant explicite : la barre de navigation contient deja un
+            //onglet "Search", et ImGui identifie ses widgets par leur libelle. Deux boutons de
+            //meme texte dans une meme fenetre partagent le meme identifiant, et le second cesse
+            //de repondre aux clics — ce qui etait le cas ici, la touche Entree restant le seul
+            //moyen de lancer une recherche.
             var buttonWidth = ImGui.CalcTextSize("Search").X + ImGui.GetStyle().FramePadding.X * 2f;
             ImGui.SetNextItemWidth(-(buttonWidth + ImGui.GetStyle().ItemSpacing.X));
 
@@ -204,12 +210,8 @@ namespace ModArchiveBrowser.Windows
                 ImGuiInputTextFlags.EnterReturnsTrue);
 
             ImGui.SameLine();
-            if (ImGui.Button("Search") || submitted)
-            {
-                //On quitte le prereglage : ce sont les filtres qui commandent desormais.
-                presetUrl = null;
-                RunSearch(1);
-            }
+            if (ImGui.Button("Search##runsearch") || submitted)
+                StartSearch();
 
             // Advanced Search Toggle
             if (ImGui.CollapsingHeader("Advanced Search Options"))
@@ -232,6 +234,15 @@ namespace ModArchiveBrowser.Windows
         /// Le nombre de requetes est plafonne a quatre : au-dela, un simple clic sur la fleche
         /// declencherait une rafale vers XMA pour un gain d'affichage negligeable.
         /// </summary>
+        private void StartSearch()
+        {
+            //Tant qu'un prereglage est actif, l'URL vient de lui et les filtres sont ignores :
+            //sans cette remise a zero, remplir un champ puis chercher renvoyait la liste de
+            //l'onglet courant, inchangee — "Trending today, 60 532 mods" quel que soit l'auteur.
+            presetUrl = null;
+            RunSearch(1);
+        }
+
         private void RunSearch(int targetPage)
         {
             page = Math.Max(1, targetPage);
@@ -332,12 +343,17 @@ namespace ModArchiveBrowser.Windows
         /// "Sort Order" finissait en "Sort Orde". Le libelle passe a gauche, sur une largeur
         /// constante, et le champ occupe tout le reste.
         /// </summary>
-        private static void LabeledInput(string label, ref string value)
+        /// <returns>Vrai si l'utilisateur a valide par Entree.</returns>
+        private static bool LabeledInput(string label, ref string value)
         {
             ImGui.TextUnformatted(label);
             ImGui.SameLine(LabelWidth);
             ImGui.SetNextItemWidth(-1);
-            ImGui.InputText($"##{label}", ref value, 100);
+
+            //Entree lance la recherche, comme dans la barre principale. Sans cela, remplir un
+            //champ avance et valider ne faisait rien : il fallait deviner qu'un bouton Search,
+            //situe plus haut et hors du panneau, etait le seul moyen de lancer la requete.
+            return ImGui.InputText($"##{label}", ref value, 100, ImGuiInputTextFlags.EnterReturnsTrue);
         }
 
         private static bool LabeledCombo(string label, ref int index, string[] options)
@@ -365,12 +381,15 @@ namespace ModArchiveBrowser.Windows
 
             if (ImGui.BeginChild("searchfilters", new Vector2(panelWidth, panelHeight), true))
             {
-                LabeledInput("Name", ref modName);
-                LabeledInput("Author", ref modAuthor);
-                LabeledInput("Races", ref modRaces);
-                LabeledInput("Tags", ref modTags);
-                LabeledInput("Affects", ref modAffects);
-                LabeledInput("Comments", ref modComments);
+                var submitted = LabeledInput("Name", ref modName);
+                submitted |= LabeledInput("Author", ref modAuthor);
+                submitted |= LabeledInput("Races", ref modRaces);
+                submitted |= LabeledInput("Tags", ref modTags);
+                submitted |= LabeledInput("Affects", ref modAffects);
+                submitted |= LabeledInput("Comments", ref modComments);
+
+                if (submitted)
+                    StartSearch();
             }
             ImGui.EndChild();
 
