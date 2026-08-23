@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -44,28 +44,28 @@ namespace ModArchiveBrowser
             }
         }
 
-        //XMA change sa mise en page sans prevenir.Plutot que de planter sur un index hors bornes,
-        //on retombe sur une valeur de repli et on trace le selecteur fautif dans le log.
-        private static string FirstText(HtmlNodeCollection? nodes, string fallback, string champ)
+        //XMA remanie sa mise en page sans prévenir. Plutôt que de planter sur un index hors
+        //bornes, on retombe sur une valeur de repli et on trace le sélecteur fautif dans le log.
+        private static string FirstText(HtmlNodeCollection? nodes, string fallback, string field)
         {
             if (nodes == null || nodes.Count == 0)
             {
-                Plugin.Logger.Warning($"Selecteur casse pour le champ '{champ}' : XMA a probablement change son HTML.");
+                Plugin.Logger.Warning($"Broken selector for field '{field}': XMA likely changed its HTML.");
                 return fallback;
             }
 
             return HtmlEntity.DeEntitize(nodes[0].InnerText).Trim();
         }
 
-        private static string FirstAttr(HtmlNodeCollection? nodes, string attribut, string fallback, string champ)
+        private static string FirstAttr(HtmlNodeCollection? nodes, string attribute, string fallback, string field)
         {
             if (nodes == null || nodes.Count == 0)
             {
-                Plugin.Logger.Warning($"Selecteur casse pour le champ '{champ}' : XMA a probablement change son HTML.");
+                Plugin.Logger.Warning($"Broken selector for field '{field}': XMA likely changed its HTML.");
                 return fallback;
             }
 
-            return nodes[0].GetAttributeValue(attribut, fallback);
+            return nodes[0].GetAttributeValue(attribute, fallback);
         }
 
         public static List<ModThumb> GetHomePageMods()
@@ -116,16 +116,16 @@ namespace ModArchiveBrowser
             HtmlNodeCollection imageNode = page.DocumentNode.SelectNodes("//img[contains(@class, 'mod-carousel-image')]/@src");
             HtmlNodeCollection authorNode = page.DocumentNode.SelectNodes("//a[contains(@class, 'user-card-link')]");
             HtmlNodeCollection typeNodes = page.DocumentNode.SelectNodes("//div[contains(@class, 'col-8')]//p[contains(@class, 'lead')]");
-            //Ces deux la etaient des XPath absolus positionnels,casses par une refonte du site.
-            //On reprend le motif par classe utilise pour les races et les tags,qui lui a tenu.
+            //Ces deux-là étaient des XPath absolus positionnels, cassés par une refonte du site.
+            //On reprend le motif par classe utilisé pour les races et les tags, qui lui a tenu.
             HtmlNodeCollection genderNodes = page.DocumentNode.SelectNodes("//div[contains(@class, 'mod-meta-block')]//code[contains(@class, 'text-light')]//a[contains(@href, '/search?genders=')]");
             HtmlNodeCollection viewsNodes = page.DocumentNode.SelectNodes("//span[contains(@class, 'emoji-block') and contains(@title, 'Views')]//span[contains(@class, 'count')]");
-            title = FirstText(titleNode, "Sans titre", "titre");
-            thumbUrl = FirstAttr(imageNode, "src", "none", "vignette");
-            authorName = FirstText(authorNode, "Inconnu", "auteur");
+            title = FirstText(titleNode, "Untitled", "title");
+            thumbUrl = FirstAttr(imageNode, "src", "none", "thumbnail");
+            authorName = FirstText(authorNode, "Unknown", "author");
             type = FirstText(typeNodes, "", "type");
-            gender = FirstText(genderNodes, "", "genre");
-            views = FirstText(viewsNodes, "0", "vues");
+            gender = FirstText(genderNodes, "", "gender");
+            views = FirstText(viewsNodes, "0", "views");
             return new ModThumb(title, url, authorName,thumbUrl,"none",type,gender,views);
 
 

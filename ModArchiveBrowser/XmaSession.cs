@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -6,15 +6,16 @@ using System.Threading;
 namespace ModArchiveBrowser
 {
     /// <summary>
-    /// Session partagee vers xivmodarchive.com.
+    /// Session partagée vers xivmodarchive.com.
     ///
-    /// Sans session,les pages marquees NSFW repondent 403 et le plugin ne peut ni les lire
-    /// ni les installer.XMA expose pour cela un endpoint public,/anon_login,qui pose un cookie
-    /// de session sans demander de compte : ce n'est pas une authentification que l'on contourne,
-    /// c'est la porte d'acceptation que le site propose lui-meme dans sa navigation.
+    /// Sans session, les pages marquées NSFW répondent 403 et le plugin ne peut ni les lire
+    /// ni les installer — soit environ un quart du catalogue. XMA expose pour cela un endpoint
+    /// public, /anon_login, qui pose un cookie de session sans demander de compte : ce n'est pas
+    /// une authentification que l'on contourne, c'est la porte d'acceptation que le site propose
+    /// lui-même dans sa navigation.
     ///
-    /// Le meme conteneur de cookies sert aux deux couches HTTP du plugin : HtmlWeb pour le
-    /// parsing des pages,HttpClient pour le telechargement des fichiers.
+    /// Le même conteneur de cookies sert aux deux couches HTTP du plugin : HtmlWeb pour le
+    /// parsing des pages, HttpClient pour le téléchargement des fichiers.
     /// </summary>
     internal static class XmaSession
     {
@@ -25,10 +26,10 @@ namespace ModArchiveBrowser
         private static readonly SemaphoreSlim Gate = new(1, 1);
         private static bool _established;
 
-        /// <summary>Conteneur partage,a brancher sur tout client HTTP du plugin.</summary>
+        /// <summary>Conteneur partagé, à brancher sur tout client HTTP du plugin.</summary>
         public static CookieContainer CookieJar => Cookies;
 
-        /// <summary>Handler pret a l'emploi pour un HttpClient qui doit voir le NSFW.</summary>
+        /// <summary>Handler prêt à l'emploi pour un HttpClient qui doit voir le NSFW.</summary>
         public static HttpClientHandler CreateHandler() => new()
         {
             CookieContainer = Cookies,
@@ -37,8 +38,8 @@ namespace ModArchiveBrowser
         };
 
         /// <summary>
-        /// Ouvre la session anonyme si elle ne l'est pas deja.Idempotent et sur en concurrence :
-        /// plusieurs fenetres peuvent declencher un chargement en meme temps.
+        /// Ouvre la session anonyme si elle ne l'est pas déjà. Idempotent et sûr en concurrence :
+        /// plusieurs fenêtres peuvent déclencher un chargement en même temps.
         /// </summary>
         public static async System.Threading.Tasks.Task EnsureAsync()
         {
@@ -62,16 +63,16 @@ namespace ModArchiveBrowser
                 var sid = Cookies.GetCookies(new Uri(Root))["connect.sid"];
                 if (sid == null)
                 {
-                    Plugin.Logger.Warning("anon_login n'a pose aucun cookie : le contenu NSFW restera inaccessible.");
+                    Plugin.Logger.Warning("anon_login set no cookie: NSFW content will stay unreachable.");
                     return;
                 }
 
                 _established = true;
-                Plugin.Logger.Information("Session XMA anonyme etablie,contenu NSFW accessible.");
+                Plugin.Logger.Information("Anonymous XMA session established, NSFW content reachable.");
             }
             catch (Exception e)
             {
-                Plugin.Logger.Warning($"Echec de l'ouverture de session XMA : {e.Message}");
+                Plugin.Logger.Warning($"Could not open XMA session: {e.Message}");
             }
             finally
             {
@@ -80,16 +81,16 @@ namespace ModArchiveBrowser
         }
 
         /// <summary>
-        /// A appeler sur un 403 : la session a expire (le cookie vit un an) ou n'a jamais ete posee.
-        /// Le prochain appel a EnsureAsync la retablira.
+        /// À appeler sur un 403 : la session a expiré (le cookie vit un an) ou n'a jamais été posée.
+        /// Le prochain appel à EnsureAsync la rétablira.
         /// </summary>
         public static void Invalidate()
         {
             _established = false;
-            Plugin.Logger.Debug("Session XMA invalidee,elle sera reouverte a la prochaine requete.");
+            Plugin.Logger.Debug("XMA session invalidated, will reopen on next request.");
         }
 
-        /// <summary>En-tete Cookie pour les couches qui ne savent pas manipuler un CookieContainer.</summary>
+        /// <summary>En-tête Cookie pour les couches qui ne savent pas manipuler un CookieContainer.</summary>
         public static string CookieHeader()
         {
             var jar = Cookies.GetCookies(new Uri(Root));

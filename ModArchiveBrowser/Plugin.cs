@@ -1,4 +1,4 @@
-using Dalamud.Game.Command;
+﻿using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using System.IO;
@@ -42,8 +42,8 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
-        //Ouvre la session anonyme XMA en tache de fond.Sans elle,toute page NSFW repond 403.
-        //On ne bloque pas le chargement du plugin : la session sera prete avant la premiere recherche.
+        //Ouvre la session anonyme XMA en tâche de fond. Sans elle, toute page NSFW répond 403.
+        //On ne bloque pas le chargement : la session sera prête avant la première recherche.
         _ = XmaSession.EnsureAsync();
 
         // you might normally want to embed resources and load them from the manifest stream
