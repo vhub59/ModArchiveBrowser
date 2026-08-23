@@ -94,18 +94,26 @@ namespace ModArchiveBrowser.Windows
 
             DrawSearchHeader();
 
-            if (modThumbs != null && modThumbs.Count > 0 && searchTask is { Status: TaskStatus.RanToCompletion })
+            //Les resultats vivent dans leur propre zone defilante, qui occupe toute la hauteur
+            //restante. Les filtres gardent ainsi une place bornee en haut et les resultats sont
+            //toujours visibles : il fallait auparavant replier les options pour les apercevoir.
+            ImGui.Separator();
+            if (ImGui.BeginChild("searchresults", new Vector2(0, 0), false))
             {
-                DrawSearchResults();
+                if (modThumbs != null && modThumbs.Count > 0 && searchTask is { Status: TaskStatus.RanToCompletion })
+                {
+                    DrawSearchResults();
+                }
+                else if (searchTask is { IsCompleted: false })
+                {
+                    ImGui.TextDisabled("Searching...");
+                }
+                else if (modThumbs is { Count: 0 })
+                {
+                    ImGui.TextDisabled("No mod matches these filters.");
+                }
             }
-            else if (searchTask is { IsCompleted: false })
-            {
-                ImGui.TextDisabled("Searching...");
-            }
-            else if (modThumbs is { Count: 0 })
-            {
-                ImGui.TextDisabled("No mod matches these filters.");
-            }
+            ImGui.EndChild();
         }
 
         public void DrawSearchHeader()
@@ -253,15 +261,22 @@ namespace ModArchiveBrowser.Windows
             ImGui.EndChild();
 
             //Les types occupent toute la largeur, repartis sur autant de colonnes qu'il en tient.
-            if (ImGui.BeginChild("searchtypes", new Vector2(0, 0), true))
+            //Sa hauteur est calculee sur le nombre de rangees reellement necessaires : passer
+            //Vector2(0, 0) signifie "prends tout l'espace restant" et le panneau descendait
+            //jusqu'en bas de la fenetre, repoussant les resultats hors de l'ecran.
+            const float columnWidth = 150f;
+            var typeCount = Enum.GetValues(typeof(Types)).Length;
+            var columns = Math.Max(1, (int)((available - style.WindowPadding.X * 2f) / columnWidth));
+            var rows = (int)Math.Ceiling(typeCount / (double)columns);
+            var typesHeight = ImGui.GetTextLineHeightWithSpacing()
+                            + rows * ImGui.GetFrameHeightWithSpacing()
+                            + style.WindowPadding.Y * 2f;
+
+            if (ImGui.BeginChild("searchtypes", new Vector2(0, typesHeight), true))
             {
                 ImGui.TextDisabled("Types");
-                ImGui.Spacing();
 
-                var columnWidth = 150f;
-                var columns = Math.Max(1, (int)(ImGui.GetContentRegionAvail().X / columnWidth));
                 var index = 0;
-
                 foreach (Types type in Enum.GetValues(typeof(Types)))
                 {
                     if (index % columns != 0)
