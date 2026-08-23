@@ -44,7 +44,33 @@ namespace ModArchiveBrowser
             {
                 Directory.CreateDirectory(_thumbnailDirectory);
             }
+            NormalizeCacheKeys();
             UpdateTextures();
+        }
+
+        /// <summary>
+        /// Les versions antérieures mémorisaient le nom encodé ("kitty%20city.zip") alors que le
+        /// fichier était écrit décodé : ces entrées ne correspondent plus à rien et la
+        /// configuration les accumulerait indéfiniment. On les décode une fois pour toutes et on
+        /// jette au passage celles dont le fichier a disparu.
+        /// </summary>
+        private void NormalizeCacheKeys()
+        {
+            var normalized = new HashSet<string>();
+            foreach (var entry in _downloadedFilenames)
+            {
+                var name = Uri.UnescapeDataString(entry);
+                if (File.Exists(Path.Combine(_downloadDirectory, name)))
+                    normalized.Add(name);
+            }
+
+            if (normalized.Count == _downloadedFilenames.Count)
+                return;
+
+            Plugin.Logger.Debug($"Cache keys normalized: {_downloadedFilenames.Count} -> {normalized.Count}.");
+            _downloadedFilenames.Clear();
+            foreach (var name in normalized)
+                _downloadedFilenames.Add(name);
         }
 
         private void UpdateTextures()//Cant call TextureProvider in PenumbraAPI so need the textures to be ready in advance
