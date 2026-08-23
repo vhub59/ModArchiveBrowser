@@ -29,12 +29,19 @@ jobs:
       # une egalite stricte, chaine a chaine. Or le SDK normalise en quatre segments : un tag
       # v0.8.0 produit un manifeste en 0.8.0.0, et l'installation echoue sur
       # "Distributed plugin version does not match repo version". On calcule donc les deux formes.
+      #
+      # ToString(4) ne convient pas pour completer : [version]"0.8.1" n'a que trois segments, sa
+      # revision vaut -1, et la methode refuse alors de la formater. On assemble a la main, en
+      # ramenant a zero les segments absents.
       - name: Read version from tag
         id: version
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}' -replace '^v', ''
-          $full = ([version]$version).ToString(4)
+          $parsed = [version]$version
+          $full = '{0}.{1}.{2}.{3}' -f $parsed.Major, $parsed.Minor,
+                                       [Math]::Max($parsed.Build, 0),
+                                       [Math]::Max($parsed.Revision, 0)
           "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "full=$full"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Building $version, published as $full"
