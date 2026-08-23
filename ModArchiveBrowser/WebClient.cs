@@ -18,6 +18,9 @@ namespace ModArchiveBrowser
         public const string new_and_updated_from_patreon_subs = "search?nsfl=false&sponsored=true&dt_compat=1&sortby=time_edited&sortorder=desc";
         public const string today_most_viewed = "search?nsfl=false&dt_compat=1&sortby=views_today&sortorder=desc";
         public const string newest_mods_from_all_users = "search?nsfl=false&dt_compat=1&sortby=time_published&sortorder=desc";
+        public static readonly string HtmlCachePath =
+            Path.Combine(System.IO.Path.GetTempPath(), "modarchivebrowser\\htmlcache");
+
         private static HtmlWeb clientInstance = null;
         public static HtmlWeb ClientInstance
         {
@@ -26,10 +29,10 @@ namespace ModArchiveBrowser
                 if (clientInstance == null)
                 {
                     clientInstance = new HtmlWeb();
-                    clientInstance.CachePath = Path.Combine(System.IO.Path.GetTempPath(), "modarchivebrowser\\htmlcache");
+                    clientInstance.CachePath = HtmlCachePath;
                     clientInstance.UsingCache = true;
                     clientInstance.UserAgent = XmaSession.UserAgent;
-                    //Sans le cookie de session,toute page NSFW repond 403.
+                    //Sans le cookie de session, toute page NSFW répond 403.
                     clientInstance.PreRequest = request =>
                     {
                         request.CookieContainer = XmaSession.CookieJar;
@@ -41,6 +44,45 @@ namespace ModArchiveBrowser
                 {
                     return clientInstance;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Vide le cache HTML sur disque.
+        ///
+        /// Indispensable quand l'utilisateur retire son accord pour le contenu adulte : les pages
+        /// NSFW deja consultees y sont stockees en entier, lien de telechargement compris, et
+        /// seraient resservies sans jamais interroger XMA. Fermer la session ne suffit donc pas,
+        /// le 403 serait purement et simplement contourne.
+        ///
+        /// On purge tout : rien dans le cache n'indique si une page etait NSFW.
+        /// </summary>
+        public static void ClearHtmlCache()
+        {
+            try
+            {
+                if (!Directory.Exists(HtmlCachePath))
+                    return;
+
+                var removed = 0;
+                foreach (var file in Directory.GetFiles(HtmlCachePath))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                        removed++;
+                    }
+                    catch (IOException)
+                    {
+                        //Fichier verrouille : on continue,le reste doit partir quand meme.
+                    }
+                }
+
+                Plugin.Logger.Information($"HTML cache cleared: {removed} file(s) removed.");
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.Warning($"Could not clear HTML cache: {e.Message}");
             }
         }
 

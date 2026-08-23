@@ -105,9 +105,17 @@ public class ConfigWindow : Window, IDisposable
             Configuration.Save();
 
             if (allowNsfw)
+            {
                 _ = XmaSession.EnsureAsync();
+            }
             else
+            {
                 XmaSession.Close();
+                //Fermer la session ne suffit pas : les pages NSFW deja consultees restent en
+                //cache sur disque, completes et avec leur lien de telechargement. Sans cette
+                //purge, elles seraient resservies sans jamais repasser par le 403 de XMA.
+                WebClient.ClearHtmlCache();
+            }
         }
 
         if (ImGui.IsItemHovered())
