@@ -40,6 +40,10 @@ namespace ModArchiveBrowser.Windows
         private int pageCount = 0;
         //Pages XMA necessaires pour remplir la grille, recalcule a chaque frame.
         private int pagesPerView = 1;
+        //Prereglage suivi (Trending, Newest, Sponsored), ou null pour une recherche par filtres.
+        private string? presetUrl = null;
+        //Chargement arme, execute a la premiere frame ou la capacite de la grille est connue.
+        private bool pendingReload = false;
         private Task searchTask = null;
         private List<ModThumb> modThumbs = new List<ModThumb>();
         ConcurrentDictionary<string, ISharedImmediateTexture> images = new ConcurrentDictionary<string, ISharedImmediateTexture>();
@@ -58,17 +62,24 @@ namespace ModArchiveBrowser.Windows
         {
 
         }
-        //Search Url should already have been built before being passed
+        /// <summary>
+        /// Selectionne un prereglage (Trending, Newest, Sponsored).
+        ///
+        /// Ne declenche pas la requete tout de suite : le nombre de pages a agreger depend de la
+        /// place disponible dans la grille, qui n'est connue qu'au moment du dessin. Le chargement
+        /// est donc arme ici et execute a la premiere frame de la vue.
+        ///
+        /// Auparavant cette methode chargeait elle-meme une page unique, sans passer par
+        /// RunSearch : la premiere page d'un onglet arrivait a moitie vide et affichait le nombre
+        /// de pages du site au lieu de celui de l'interface. Les fleches, qui passaient par
+        /// RunSearch, se comportaient correctement — d'ou une premiere page fautive et une
+        /// pagination saine des qu'on la quittait.
+        /// </summary>
         public void UpdateSearch(string url)
         {
-            searchTask = Task.Run(() =>
-            {
-                var res = WebClient.DoSearch(url);
-                this.modThumbs = res.Mods;
-                this.totalCount = res.TotalCount;
-                this.pageCount = res.PageCount;
-                RebuildSharedTextures();
-            });
+            presetUrl = url;
+            page = 1;
+            pendingReload = true;
         }
 
         private void RebuildSharedTextures()
@@ -112,6 +123,12 @@ namespace ModArchiveBrowser.Windows
             pagesPerView = Math.Clamp(
                 (int)Math.Ceiling(ModGrid.Capacity(ImGui.GetContentRegionAvail()) / 15.0), 1, 4);
 
+            if (pendingReload)
+            {
+                pendingReload = false;
+                RunSearch(1);
+            }
+
             if (ImGui.BeginChild("searchresults", new Vector2(0, 0), false))
             {
                 if (modThumbs != null && modThumbs.Count > 0 && searchTask is { Status: TaskStatus.RanToCompletion })
@@ -148,6 +165,8 @@ namespace ModArchiveBrowser.Windows
             ImGui.SameLine();
             if (ImGui.Button("Search") || submitted)
             {
+                //On quitte le prereglage : ce sont les filtres qui commandent desormais.
+                presetUrl = null;
                 RunSearch(1);
             }
 
@@ -188,7 +207,7 @@ namespace ModArchiveBrowser.Windows
 
                 for (var offset = 0; offset < batch; offset++)
                 {
-                    var res = WebClient.DoSearch(BuildUrl(firstSitePage + offset));
+                    var res = WebClient.DoSearch(UrlForSitePage(firstSitePage + offset));
                     total = res.TotalCount;
                     sitePages = res.PageCount;
 
@@ -210,6 +229,13 @@ namespace ModArchiveBrowser.Windows
                 RebuildSharedTextures();
             });
         }
+
+        /// <summary>
+        /// URL d'une page du site : celle du prereglage si l'on en suit un, sinon celle
+        /// construite a partir des filtres.
+        /// </summary>
+        private string UrlForSitePage(int sitePage)
+            => presetUrl != null ? $"{presetUrl}&page={sitePage}" : BuildUrl(sitePage);
 
         private string BuildUrl(int sitePage) => WebClient.BuildSearchURL(
             selectedSortBy,
