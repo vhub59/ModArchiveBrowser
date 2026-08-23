@@ -28,9 +28,9 @@ namespace ModArchiveBrowser.Windows
         private bool _isLoading = false;
         private string _statusMessage = string.Empty;
         private bool lastNodeWasBr = false;
-        private bool _alreadyInstalled = false;
-        //Nom d'un mod deja installe qui ressemble a celui-ci, sans lui etre identique.
-        private string? _similarInstalled = null;
+        //Ce que Penumbra possede deja face a ce mod, et dans quelle version.
+        private InstallState _installState = InstallState.Absent;
+        private InstalledMod? _installedMatch = null;
         public ModWindow(Plugin plugin): base("Mod view window##")
         {
             this.plugin = plugin;
@@ -95,6 +95,43 @@ namespace ModArchiveBrowser.Windows
             }
         }
 
+        /// <summary>
+        /// Bouton d'installation d'un modpack, selon ce que Penumbra possede deja.
+        ///
+        /// La distinction essentielle est entre "deja installe" et "version differente". Ecarter
+        /// un mod au seul motif qu'un homonyme existe masquerait toutes les mises a jour, ce qui
+        /// serait pire que le doublon qu'on cherche a eviter : une nouvelle version est
+        /// justement ce qu'on veut installer.
+        /// </summary>
+        private void DrawInstallButton()
+        {
+            switch (_installState)
+            {
+                case InstallState.DifferentVersion:
+                    if (ImGui.Button("Update"))
+                        StartInstall();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(
+                            $"Penumbra has \"{_installedMatch?.Name}\" in version {_installedMatch?.Version}.\n" +
+                            "Installing adds this version alongside it; remove the old one from Penumbra if you no longer need it.");
+                    break;
+
+                case InstallState.Similar:
+                    if (ImGui.Button("Install anyway"))
+                        StartInstall();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(
+                            $"Penumbra already has \"{_installedMatch?.Name}\", which looks like the same mod.\n" +
+                            "Versions could not be compared, so this may or may not be a duplicate.");
+                    break;
+
+                default:
+                    if (ImGui.Button("Install using Penumbra"))
+                        StartInstall();
+                    break;
+            }
+        }
+
         /// <summary>Nom de l'hebergeur externe, pour l'expliquer a l'utilisateur.</summary>
         private string ExternalHost()
         {
@@ -118,8 +155,8 @@ namespace ModArchiveBrowser.Windows
         /// </summary>
         private void RefreshInstalledState()
         {
-            _alreadyInstalled = false;
-            _similarInstalled = null;
+            _installState = InstallState.Absent;
+            _installedMatch = null;
 
             if (!HostedByXma)
                 return;
@@ -129,16 +166,19 @@ namespace ModArchiveBrowser.Windows
                 var fileName = Path.GetFileNameWithoutExtension(
                     Uri.UnescapeDataString(new Uri(WebClient.xivmodarchiveRoot + mod!.Value.url_download_button).AbsolutePath));
 
-                _alreadyInstalled = plugin.penumbra.IsModInstalled(fileName);
-                if (!_alreadyInstalled)
-                    _similarInstalled = plugin.penumbra.FindSimilarMod(fileName);
+                var installed = InstalledMods.Read(plugin.penumbra.GetModDirectory());
+                var modId = AvailabilityIndex.ModIdFromUrl(mod.Value.modThumb.url);
+
+                (_installState, _installedMatch) = InstalledMods.Compare(installed, modId, fileName, fileName);
             }
-            catch
+            catch (Exception e)
             {
-                _alreadyInstalled = false;
-                _similarInstalled = null;
+                Plugin.Logger.Debug($"Could not compare with installed mods: {e.Message}");
+                _installState = InstallState.Absent;
+                _installedMatch = null;
             }
         }
+
         public void Dispose()
         {
 
@@ -369,19 +409,19 @@ namespace ModArchiveBrowser.Windows
                 //Mega, Drive ou Patreon sinon. Environ un tiers du catalogue est dans ce second
                 //cas et reste hors de portee : mieux vaut nommer l'hebergeur que laisser un
                 //bouton grise sans explication.
-                if (_alreadyInstalled)
+                if (_installState == InstallState.SameVersion)
                 {
-                    ImGui.BeginDisabled();
-                    ImGui.Button("Already installed");
-                    ImGui.EndDisabled();
+                    using (ImRaii.Disabled(true))
+                        ImGui.Button("Already installed");
+
                     if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip("Penumbra already has a mod with this name.");
+                        ImGui.SetTooltip($"Penumbra already has \"{_installedMatch?.Name}\" in version {_installedMatch?.Version}.");
                 }
                 else if (!HostedByXma)
                 {
-                    ImGui.BeginDisabled();
-                    ImGui.Button("Not available");
-                    ImGui.EndDisabled();
+                    using (ImRaii.Disabled(true))
+                        ImGui.Button("Not available");
+
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip($"Hosted on {ExternalHost()}, outside xivmodarchive.\nUse \"Open in browser\" to get it manually.");
                 }
@@ -389,27 +429,13 @@ namespace ModArchiveBrowser.Windows
                 {
                     //Etre heberge par XMA ne suffit pas : encore faut-il que le fichier soit un
                     //modpack. Un .pmp ou un .ttmp2 s'installe a coup sur ; une archive peut tout
-                    //aussi bien contenir les sources de l'auteur (.psd, .blend) et ne rien
-                    //donner. Le bouton promettait "Install using Penumbra" dans tous les cas.
+                    //aussi bien contenir les sources de l'auteur et ne rien donner.
                     var extension = DownloadExtension();
                     switch (extension)
                     {
                         case ".pmp":
                         case ".ttmp2":
-                            //Un mod ressemblant est signale sans etre bloque : la comparaison est
-                            //volontairement large et peut se tromper, c'est a l'utilisateur de
-                            //trancher.
-                            if (_similarInstalled != null)
-                            {
-                                if (ImGui.Button("Install anyway"))
-                                    StartInstall();
-                                if (ImGui.IsItemHovered())
-                                    ImGui.SetTooltip($"Penumbra already has \"{_similarInstalled}\",\nwhich looks like the same mod under another name.");
-                            }
-                            else if (ImGui.Button("Install using Penumbra"))
-                            {
-                                StartInstall();
-                            }
+                            DrawInstallButton();
                             break;
 
                         case ".zip":
@@ -424,9 +450,8 @@ namespace ModArchiveBrowser.Windows
                             break;
 
                         default:
-                            ImGui.BeginDisabled();
-                            ImGui.Button("Not installable");
-                            ImGui.EndDisabled();
+                            using (ImRaii.Disabled(true))
+                                ImGui.Button("Not installable");
                             if (ImGui.IsItemHovered())
                                 ImGui.SetTooltip($"Penumbra cannot use a {(extension.IsNullOrEmpty() ? "file of this type" : extension)} file.");
                             break;

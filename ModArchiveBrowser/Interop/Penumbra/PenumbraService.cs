@@ -24,6 +24,7 @@ namespace ModArchiveBrowser.Interop.Penumbra
 
         private readonly IDalamudPluginInterface _pluginInterface;
         private global::Penumbra.Api.IpcSubscribers.GetModList? _getMods;
+        private global::Penumbra.Api.IpcSubscribers.GetModDirectory? _getModDirectory;
         private global::Penumbra.Api.IpcSubscribers.OpenMainWindow? _openModPage;
         private global::Penumbra.Api.IpcSubscribers.InstallMod? _installMod;
         private EventSubscriber<string, float, float>? _preSettingsTabBarDraw;
@@ -60,6 +61,29 @@ namespace ModArchiveBrowser.Interop.Penumbra
             {
                 Plugin.Logger.Debug($"Could not queue mod for install:\n{ex}");
                 return PenumbraApiEc.UnknownError;
+            }
+        }
+
+        /// <summary>
+        /// Dossier ou Penumbra range ses mods, ou une chaine vide s'il est indisponible.
+        ///
+        /// Chaque sous-dossier y porte un meta.json decrivant le mod : son nom, sa version, et le
+        /// site dont il provient. C'est la seule source fiable pour savoir ce qui est deja
+        /// installe — l'IPC ne renvoie que des noms, sans version ni origine.
+        /// </summary>
+        public string GetModDirectory()
+        {
+            if (!Available)
+                return string.Empty;
+
+            try
+            {
+                return _getModDirectory!.Invoke();
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.Debug($"Could not read Penumbra's mod directory:\n{ex}");
+                return string.Empty;
             }
         }
 
@@ -125,13 +149,26 @@ namespace ModArchiveBrowser.Interop.Penumbra
             return null;
         }
 
-        /// <summary>Nom debarrasse de ses etiquettes "[...]" et de ses qualificatifs "(...)".</summary>
+        /// <summary>
+        /// Nom debarrasse de ses etiquettes "[...]", de ses qualificatifs "(...)" et de son
+        /// numero de version.
+        ///
+        /// Le nom compare vient du fichier propose au telechargement, qui porte souvent sa
+        /// version : "Bibo+ (Bibo+ Base Install) v3.1.5.pmp" face a "[HS] Bibo+ (Bibo+ Base
+        /// Install)" deja installe. Sans retirer le "v3.1.5", les deux restaient distincts.
+        ///
+        /// Seules les formes non ambigues sont retirees — "v3", "V2.1", "1.0.4" — jamais un
+        /// entier isole : "Adidas Superstar 2" doit rester different d'"Adidas Superstar".
+        /// </summary>
         private static string BaseName(string? name)
         {
             if (string.IsNullOrWhiteSpace(name))
                 return string.Empty;
 
             var stripped = System.Text.RegularExpressions.Regex.Replace(name, @"\[[^\]]*\]|\([^\)]*\)", " ");
+            stripped = System.Text.RegularExpressions.Regex.Replace(stripped, @"\b[vV]\d+(?:\.\d+)*\b", " ");
+            stripped = System.Text.RegularExpressions.Regex.Replace(stripped, @"\b\d+(?:\.\d+)+\b", " ");
+
             return System.Text.RegularExpressions.Regex.Replace(stripped, @"\s+", " ").Trim();
         }
 
@@ -188,6 +225,7 @@ namespace ModArchiveBrowser.Interop.Penumbra
                         $"Invalid Version {CurrentMajor}.{CurrentMinor:D4}, required major Version {RequiredPenumbraBreakingVersion} with feature greater or equal to {RequiredPenumbraFeatureVersion}.");
 
                 _getMods = new global::Penumbra.Api.IpcSubscribers.GetModList(_pluginInterface);
+                _getModDirectory = new global::Penumbra.Api.IpcSubscribers.GetModDirectory(_pluginInterface);
                 _openModPage = new global::Penumbra.Api.IpcSubscribers.OpenMainWindow(_pluginInterface);
                 _installMod = new global::Penumbra.Api.IpcSubscribers.InstallMod(_pluginInterface);
                 //_preSettingsTabBarDraw = global::Penumbra.Api.IpcSubscribers.PreSettingsTabBarDraw.Subscriber(_pluginInterface, _windowIntegration.PreSettingsTabBarDraw);
@@ -209,6 +247,7 @@ namespace ModArchiveBrowser.Interop.Penumbra
                 _openModPage = null;
                 _installMod = null;
                 _getMods = null;
+                _getModDirectory = null;
                 Available = false;
                 //_preSettingsTabBarDraw?.Dispose();
                 Plugin.Logger.Debug("modarchivebrowser detached from Penumbra.");
