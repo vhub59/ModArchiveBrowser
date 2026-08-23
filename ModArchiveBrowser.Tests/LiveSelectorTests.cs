@@ -17,10 +17,14 @@ namespace ModArchiveBrowser.Tests
     ///
     /// Ces tests sortent donc sur le reseau, ce qui les rend lents et dependants d'un tiers. Ils
     /// portent le trait "Category=Live" et sont exclus des executions ordinaires : une
-    /// verification qui echoue parce que le site est en maintenance apprend a l'ignorer. Ils
-    /// tournent seuls, sur declenchement periodique.
+    /// verification qui echoue parce que le site est en maintenance apprend a l'ignorer.
     ///
     ///     dotnet test --filter Category=Live
+    ///
+    /// A lancer depuis une connexion ordinaire : xivmodarchive repond 403 aux adresses de
+    /// datacenter, ce qui exclut de les automatiser sur un runner GitHub — mesure faite, les cinq
+    /// echouent en 403 la ou elles passent en local. Le seul contournement serait de se faire
+    /// passer pour un navigateur, ce que ce plugin s'interdit ailleurs.
     /// </summary>
     [Trait("Category", "Live")]
     public class LiveSelectorTests

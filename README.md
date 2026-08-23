@@ -124,10 +124,18 @@ So the tests assert the *absence* of those placeholders, against pages of the si
 invisible: a wrong sort key the site silently ignores, a compatibility threshold that quietly
 halved the results, a missing `types` parameter that hid a third of the catalogue.
 
+```
+dotnet test ModArchiveBrowser.Tests/ModArchiveBrowser.Tests.csproj --filter "Category=Live"
+```
+
 `Category=Live` runs the same checks against xivmodarchive as it is right now. Saved pages prove
 the code could parse the site on the day they were captured; only the live run can tell you it
-changed since. It runs weekly in CI and opens an issue when it breaks — excluded from ordinary
-runs, because a check that fails when a third party is down teaches you to ignore failures.
+changed since.
+
+**This one has to be run from a normal connection.** xivmodarchive answers 403 to requests from
+datacentre addresses, so it cannot run in CI — the only way around that would be to pretend to be
+a browser, which is the opposite of what the section below promises. Run it by hand before
+cutting a release, and whenever the plugin starts showing empty cards.
 
 When the site does change: fix the selector, then refresh the saved pages so the offline suite
 matches reality again.
