@@ -2,7 +2,7 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <Version>0.8.2</Version>
+    <Version>0.8.3</Version>
     <Description>ModArchiveBrowser</Description>
     <PackageProjectUrl>https://github.com/Noevain/ModArchiveBrowser</PackageProjectUrl>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
