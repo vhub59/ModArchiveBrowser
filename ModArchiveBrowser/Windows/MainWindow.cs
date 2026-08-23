@@ -79,7 +79,11 @@ public class MainWindow : Window, IDisposable
 
     private void DrawHomePageTable()
     {
-        NavBar.Context(NavBar.TitleOf(NavTarget.Home), modThumbs?.Count ?? 0, 0, plugin.prefetcher.Pending);
+        var visible = ModGrid.Visible(plugin.Configuration, modThumbs);
+
+        NavBar.Context(NavBar.TitleOf(NavTarget.Home), modThumbs?.Count ?? 0,
+            visible.Count == (modThumbs?.Count ?? 0) ? 0 : visible.Count,
+            plugin.prefetcher.Pending);
 
         //Le rafraichissement ne concerne que l'accueil : les autres vues se rechargent par leur
         //propre bouton de recherche.
@@ -106,49 +110,29 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        //Le nombre de colonnes suit la largeur de la fenetre au lieu d'etre fige a trois : sur
-        //une fenetre large, la grille laissait un vide equivalent a deux colonnes sur sa droite.
-        var available = ImGui.GetContentRegionAvail().X;
-        var columns = ModGrid.ColumnCount(available);
-        var cardWidth = ModGrid.CardWidth(available, columns);
-
-        for (var i = 0; i < modThumbs.Count; i++)
+        if (visible.Count == 0)
         {
-            var thumb = modThumbs[i];
-
-            //TryGetValue et non l'indexeur : RebuildSharedTextures lance les telechargements sans
-            //etre attendu, si bien que refreshTask est terminee bien avant les vignettes. Une
-            //image encore absente, ou dont le telechargement a echoue, faisait lever une
-            //KeyNotFoundException en pleine boucle de rendu.
-            IDalamudTextureWrap? texture = null;
-            if (images.TryGetValue(thumb.url_thumb, out var shared))
-                texture = shared.GetWrapOrDefault();
-
-            var availability = AvailabilityIndex.Get(plugin.Configuration, thumb.url);
-
-            if (ModGrid.Draw($"##homecard{i}", thumb, texture, cardWidth, availability,
-                //Le masquage total prime : il couvre les mods dont l'auteur n'a pas declare la nudite.
-                obscure: plugin.Configuration.ObscureAllThumbnails
-                         || (plugin.Configuration.BlurAdultThumbnails && AvailabilityIndex.IsAdult(plugin.Configuration, thumb.url)),
-                obscureLabel: plugin.Configuration.ObscureAllThumbnails ? "Hidden" : "Adult content"))
-            {
-                try
-                {
-                    plugin.modWindow.ChangeMod(thumb);
-                    ShowingMod = true;
-                }
-                catch (Exception e)
-                {
-                    Plugin.ReportError("Error while loading mod,check /xllog for details", e);
-                }
-            }
-
-            if ((i + 1) % columns != 0 && i < modThumbs.Count - 1)
-            {
-                ImGui.SameLine();
-            }
+            ImGui.TextDisabled("Every mod on this page is hosted elsewhere and hidden by the filter.");
+            return;
         }
+
+        ModGrid.DrawPage(plugin, "homecard", visible, TextureFor, thumb =>
+        {
+            plugin.modWindow.ChangeMod(thumb);
+            ShowingMod = true;
+        });
     }
+
+    /// <summary>
+    /// Vignette deja chargee pour cette adresse, ou null.
+    ///
+    /// TryGetValue et non l'indexeur : RebuildSharedTextures lance les telechargements sans etre
+    /// attendu, si bien que refreshTask est terminee bien avant les vignettes. Une image encore
+    /// absente, ou dont le telechargement a echoue, faisait lever une KeyNotFoundException en
+    /// pleine boucle de rendu.
+    /// </summary>
+    private IDalamudTextureWrap? TextureFor(string url)
+        => images.TryGetValue(url, out var shared) ? shared.GetWrapOrDefault() : null;
 
     /// <summary>
     /// Fiche d'un mod, avec le chemin parcouru pour y revenir.

@@ -127,11 +127,11 @@ namespace ModArchiveBrowser
                     }
                 }
 
-                Plugin.Logger.Information($"HTML cache cleared: {removed} file(s) removed.");
+                Log.Information($"HTML cache cleared: {removed} file(s) removed.");
             }
             catch (Exception e)
             {
-                Plugin.Logger.Warning($"Could not clear HTML cache: {e.Message}");
+                Log.Warning($"Could not clear HTML cache: {e.Message}");
             }
         }
 
@@ -141,7 +141,7 @@ namespace ModArchiveBrowser
         {
             if (nodes == null || nodes.Count == 0)
             {
-                Plugin.Logger.Warning($"Broken selector for field '{field}': XMA likely changed its HTML.");
+                Log.Warning($"Broken selector for field '{field}': XMA likely changed its HTML.");
                 return fallback;
             }
 
@@ -152,7 +152,7 @@ namespace ModArchiveBrowser
         {
             if (nodes == null || nodes.Count == 0)
             {
-                Plugin.Logger.Warning($"Broken selector for field '{field}': XMA likely changed its HTML.");
+                Log.Warning($"Broken selector for field '{field}': XMA likely changed its HTML.");
                 return fallback;
             }
 
@@ -185,24 +185,34 @@ namespace ModArchiveBrowser
         {
             try
             {
-                var page = ClientInstance.Load($"{xivmodarchiveRoot}/modid/{modId}");
-
-                var link = page.DocumentNode.SelectSingleNode("//a[@id='mod-download-link']")
-                    ?.GetAttributeValue("href", string.Empty) ?? string.Empty;
-
-                var type = page.DocumentNode.SelectSingleNode("//div[contains(@class, 'col-8')]//p[contains(@class, 'lead')]")
-                    ?.InnerText ?? string.Empty;
-
-                var adult = HtmlEntity.DeEntitize(type).TrimStart()
-                    .StartsWith("NSFW", StringComparison.OrdinalIgnoreCase);
-
-                return new ModFacts(link, adult);
+                return ReadFacts(ClientInstance.Load($"{xivmodarchiveRoot}/modid/{modId}"));
             }
             catch (Exception e)
             {
-                Plugin.Logger.Debug($"Could not read mod {modId}: {e.Message}");
+                Log.Debug($"Could not read mod {modId}: {e.Message}");
                 return new ModFacts(string.Empty, false);
             }
+        }
+
+        /// <summary>
+        /// Les deux selecteurs de ModFacts, separes du chargement pour etre verifiables.
+        ///
+        /// C'est le couple le plus sollicite du plugin : le prechargement l'applique a chaque
+        /// carte affichee. S'il casse, tout devient "installabilite inconnue" et plus rien n'est
+        /// signale comme adulte — sans que rien ne plante.
+        /// </summary>
+        public static ModFacts ReadFacts(HtmlDocument page)
+        {
+            var link = page.DocumentNode.SelectSingleNode("//a[@id='mod-download-link']")
+                ?.GetAttributeValue("href", string.Empty) ?? string.Empty;
+
+            var type = page.DocumentNode.SelectSingleNode("//div[contains(@class, 'col-8')]//p[contains(@class, 'lead')]")
+                ?.InnerText ?? string.Empty;
+
+            var adult = HtmlEntity.DeEntitize(type).TrimStart()
+                .StartsWith("NSFW", StringComparison.OrdinalIgnoreCase);
+
+            return new ModFacts(link, adult);
         }
 
         /// <summary>Une entree de l'historique des versions d'un mod.</summary>
@@ -254,7 +264,7 @@ namespace ModArchiveBrowser
             }
             catch (Exception e)
             {
-                Plugin.Logger.Debug($"Could not read the history of mod {modId}: {e.Message}");
+                Log.Debug($"Could not read the history of mod {modId}: {e.Message}");
             }
 
             return entries;
@@ -284,7 +294,7 @@ namespace ModArchiveBrowser
             }
             catch (Exception e)
             {
-                Plugin.Logger.Debug($"Could not read the version of mod {modId}: {e.Message}");
+                Log.Debug($"Could not read the version of mod {modId}: {e.Message}");
                 return string.Empty;
             }
         }
@@ -293,17 +303,17 @@ namespace ModArchiveBrowser
         {
             //La vitrine change en continu : la mettre en cache n'aurait pas de sens.
             HtmlDocument homepage = SearchInstance.Load(xivmodarchiveRoot);
-            Plugin.Logger.Debug("Request made");
+            Log.Debug("Request made");
             return ParseHomePage(homepage);
         }
         //param url should be in the format of xivmodarchive aka /modid/XXXX and not absolutes
         public static (Mod,HtmlNodeCollection) GetModPage(ModThumb modThumb)
         {
             string url = xivmodarchiveRoot + modThumb.url;
-            Plugin.Logger.Debug($"{url}");
+            Log.Debug($"{url}");
             HtmlDocument page = ClientInstance.Load(url);
             HtmlNodeCollection descriptionNodeStart = page.DocumentNode.SelectNodes("//div[@id='info']");
-            Plugin.Logger.Debug("Request made");
+            Log.Debug("Request made");
             return (ParseModPage(page,modThumb),descriptionNodeStart);
         }
 
@@ -315,10 +325,10 @@ namespace ModArchiveBrowser
             //Le defaut ne se voyait que par cette commande, jamais en passant par la recherche.
             string relativePath = "/modid/" + modId;
             string url = xivmodarchiveRoot + relativePath;
-            Plugin.Logger.Debug($"{url}");
+            Log.Debug($"{url}");
             HtmlDocument page = ClientInstance.Load(url);
             HtmlNodeCollection descriptionNodeStart = page.DocumentNode.SelectNodes("//div[@id='info']");
-            Plugin.Logger.Debug("Request made");
+            Log.Debug("Request made");
             ModThumb mdThumb = GetModThumbFromFullPage(page,relativePath);
             return(ParseModPage(page,mdThumb),descriptionNodeStart);
         }
@@ -339,13 +349,22 @@ namespace ModArchiveBrowser
             //SearchInstance et non ClientInstance : toutes les recherches partageraient sinon une
             //seule entree de cache, leur chaine de requete etant ignoree.
             HtmlDocument page = SearchInstance.Load(url);
-            Plugin.Logger.Debug("Request made");
+            Log.Debug("Request made");
 
-            return new SearchResults(
-                ParseSearchResults(page),
-                ParseCount(page, @"([\d,]+)\s*Results"),
-                ParseCount(page, @"over\s+([\d,]+)\s*\n?\s*Pages"));
+            var (total, pages) = ParseCounts(page);
+            return new SearchResults(ParseSearchResults(page), total, pages);
         }
+
+        /// <summary>
+        /// Nombre total de resultats et nombre de pages, lus dans l'entete de la recherche.
+        ///
+        /// Separe de DoSearch pour que la lecture puisse etre verifiee sur une page enregistree :
+        /// ces deux nombres sont ceux qui ont revele que le plugin ne voyait qu'une partie du
+        /// catalogue, et une refonte de l'entete les ramenerait silencieusement a zero.
+        /// </summary>
+        public static (int Total, int Pages) ParseCounts(HtmlDocument page)
+            => (ParseCount(page, @"([\d,]+)\s*Results"),
+                ParseCount(page, @"over\s+([\d,]+)\s*\n?\s*Pages"));
 
         /// <summary>Extrait un nombre de l'entete de resultats, ou zero s'il est introuvable.</summary>
         private static int ParseCount(HtmlDocument page, string pattern)
@@ -358,7 +377,7 @@ namespace ModArchiveBrowser
             }
             catch (Exception e)
             {
-                Plugin.Logger.Debug($"Could not read the result count: {e.Message}");
+                Log.Debug($"Could not read the result count: {e.Message}");
             }
 
             return 0;

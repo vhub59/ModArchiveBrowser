@@ -67,6 +67,19 @@ public class Configuration : IPluginConfiguration
     /// </summary>
     public bool ObscureAllThumbnails { get; set; } = false;
 
+    /// <summary>
+    /// Retire de la grille les mods dont on sait qu'ils ne s'installeront pas d'ici.
+    ///
+    /// Le filtre ne cache que ce qui est etabli : un mod heberge sur Mega ou dans un format que
+    /// Penumbra ne lit pas. Tout ce qui reste inconnu continue de s'afficher — l'index se
+    /// construit page par page, et masquer l'inconnu reviendrait a vider la grille puis a la voir
+    /// se remplir au fil du prechargement.
+    ///
+    /// Faux par defaut : le catalogue entier reste la vue de reference, et environ un mod sur
+    /// quatre disparait quand on l'active.
+    /// </summary>
+    public bool HideUnavailable { get; set; } = false;
+
     // the below exist just to make saving less cumbersome
     public void Save()
     {

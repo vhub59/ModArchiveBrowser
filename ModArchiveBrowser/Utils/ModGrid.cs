@@ -35,6 +35,77 @@ namespace ModArchiveBrowser.Utils
         /// </summary>
         private static readonly Dictionary<string, float> HoverProgress = new();
 
+        /// <summary>
+        /// Mods a afficher, une fois le filtre applique.
+        ///
+        /// Calcule par l'appelant avant la ligne de contexte, pour qu'elle annonce ce qui sera
+        /// reellement montre plutot que la taille de la page brute.
+        /// </summary>
+        public static List<ModThumb> Visible(Configuration config, IReadOnlyList<ModThumb>? thumbs)
+        {
+            if (thumbs == null)
+                return new List<ModThumb>();
+
+            if (!config.HideUnavailable)
+                return new List<ModThumb>(thumbs);
+
+            var visible = new List<ModThumb>(thumbs.Count);
+            foreach (var thumb in thumbs)
+            {
+                if (!AvailabilityIndex.IsDeadEnd(AvailabilityIndex.Get(config, thumb.url)))
+                    visible.Add(thumb);
+            }
+
+            return visible;
+        }
+
+        /// <summary>
+        /// Dessine une page entiere de cartes, retours a la ligne compris.
+        ///
+        /// L'accueil et la recherche portaient deux copies de cette boucle, aux memes defauts :
+        /// chaque correction devait etre faite deux fois, et le filtre d'installabilite aurait
+        /// ajoute une troisieme occasion de les desynchroniser. Le passage a la ligne se calcule
+        /// ici sur la liste effectivement affichee — filtrer sans y toucher aurait laisse des
+        /// trous dans la grille, l'index d'origine ne correspondant plus a la position.
+        /// </summary>
+        public static void DrawPage(
+            Plugin plugin,
+            string idPrefix,
+            IReadOnlyList<ModThumb> thumbs,
+            Func<string, IDalamudTextureWrap?> textureFor,
+            Action<ModThumb> onOpen)
+        {
+            var config = plugin.Configuration;
+            var available = ImGui.GetContentRegionAvail().X;
+            var columns = ColumnCount(available);
+            var cardWidth = CardWidth(available, columns);
+
+            for (var i = 0; i < thumbs.Count; i++)
+            {
+                var thumb = thumbs[i];
+                var availability = AvailabilityIndex.Get(config, thumb.url);
+
+                if (Draw($"##{idPrefix}{i}", thumb, textureFor(thumb.url_thumb), cardWidth, availability,
+                        //Le masquage total prime : il couvre les mods dont l'auteur n'a pas declare la nudite.
+                        obscure: config.ObscureAllThumbnails
+                                 || (config.BlurAdultThumbnails && AvailabilityIndex.IsAdult(config, thumb.url)),
+                        obscureLabel: config.ObscureAllThumbnails ? "Hidden" : "Adult content"))
+                {
+                    try
+                    {
+                        onOpen(thumb);
+                    }
+                    catch (Exception e)
+                    {
+                        Plugin.ReportError("Error while loading mod,check /xllog for details", e);
+                    }
+                }
+
+                if ((i + 1) % columns != 0 && i < thumbs.Count - 1)
+                    ImGui.SameLine();
+            }
+        }
+
         public static int ColumnCount(float availableWidth)
         {
             var spacing = ImGui.GetStyle().ItemSpacing.X;

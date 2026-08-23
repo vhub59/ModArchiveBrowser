@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Le projet reference le plugin, donc il faut le meme cadre cible que lui (net10.0-windows) et
+    les bibliotheques de Dalamud a portee : DALAMUD_HOME suffit, le SDK du plugin s'en charge.
+
+    Aucun test ne demarre Dalamud pour autant. Les fonctions d'analyse prennent un HtmlDocument et
+    ne touchent ni au jeu ni a l'IPC ; le seul lien avec Dalamud etait le journal, passe depuis par
+    une facade qui accepte de ne pas en avoir.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    Dalamud.NET.Sdk reference les bibliotheques de Dalamud sans les copier : dans le jeu elles sont
+    deja chargees. Le lanceur de tests, lui, n'a rien a charger, et Configuration — qui implemente
+    IPluginConfiguration — echouait donc a se resoudre au moment de l'executer.
+
+    Seul Dalamud.dll est necessaire : les tests ne touchent ni a ImGui, ni au jeu, ni a l'IPC.
+  -->
+  <PropertyGroup>
+    <DalamudLibPath Condition="'$(DALAMUD_HOME)' != ''">$(DALAMUD_HOME)</DalamudLibPath>
+    <DalamudLibPath Condition="'$(DalamudLibPath)' == ''">$(AppData)\XIVLauncher\addon\Hooks\dev</DalamudLibPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Dalamud">
+      <HintPath>$(DalamudLibPath)\Dalamud.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ModArchiveBrowser\ModArchiveBrowser.csproj" />
+  </ItemGroup>
+
+  <!--
+    Les pages de reference sont copiees a cote de l'assemblage de test : les tests les lisent
+    depuis le repertoire d'execution, sans dependre de l'emplacement du depot.
+  -->
+  <ItemGroup>
+    <None Include="Fixtures\*.html" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

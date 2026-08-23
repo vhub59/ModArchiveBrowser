@@ -126,7 +126,10 @@ namespace ModArchiveBrowser.Windows
         /// </summary>
         public void DrawEmbedded(string title)
         {
-            NavBar.Context(title, totalCount > 0 ? totalCount : modThumbs?.Count ?? 0, modThumbs?.Count ?? 0, plugin.prefetcher.Pending);
+            //On annonce ce qui reste apres filtrage, pas la taille de la page brute : sinon la
+            //ligne promet quinze cartes la ou onze s'affichent.
+            NavBar.Context(title, totalCount > 0 ? totalCount : modThumbs?.Count ?? 0,
+                VisibleThumbs.Count, plugin.prefetcher.Pending);
             ImGui.Separator();
 
             DrawSearchHeader();
@@ -520,50 +523,36 @@ namespace ModArchiveBrowser.Windows
             if (modThumbs == null)
                 return;
 
-            //Meme grille que la page d'accueil : colonnes calculees sur la largeur disponible,
-            //cartes de hauteur constante, vignettes au bon ratio. Les deux fenetres portaient
-            //jusqu'ici le meme code duplique, avec les memes defauts.
-            var available = ImGui.GetContentRegionAvail().X;
-            var columns = ModGrid.ColumnCount(available);
-            var cardWidth = ModGrid.CardWidth(available, columns);
+            //Meme grille que la page d'accueil, et desormais le meme code : les deux fenetres en
+            //portaient chacune une copie, avec les memes defauts a corriger deux fois.
+            var visible = VisibleThumbs;
 
-            for (var i = 0; i < modThumbs.Count; i++)
+            if (visible.Count == 0)
             {
-                var thumb = modThumbs[i];
-
-                //TryGetValue et non l'indexeur : une vignette dont le telechargement a echoue
-                //n'est jamais ajoutee au dictionnaire et faisait lever une KeyNotFoundException
-                //en pleine boucle de rendu.
-                IDalamudTextureWrap? texture = null;
-                if (images.TryGetValue(thumb.url_thumb, out var shared))
-                    texture = shared.GetWrapOrDefault();
-
-                var availability = AvailabilityIndex.Get(plugin.Configuration, thumb.url);
-
-                if (ModGrid.Draw($"##searchcard{i}", thumb, texture, cardWidth, availability,
-                //Le masquage total prime : il couvre les mods dont l'auteur n'a pas declare la nudite.
-                obscure: plugin.Configuration.ObscureAllThumbnails
-                         || (plugin.Configuration.BlurAdultThumbnails && AvailabilityIndex.IsAdult(plugin.Configuration, thumb.url)),
-                obscureLabel: plugin.Configuration.ObscureAllThumbnails ? "Hidden" : "Adult content"))
-                {
-                    try
-                    {
-                        plugin.modWindow.ChangeMod(thumb);
-                        plugin.MainWindow.ShowingMod = true;
-                    }
-                    catch (Exception e)
-                    {
-                        Plugin.ReportError("Error while loading mod,check /xllog for details", e);
-                    }
-                }
-
-                if ((i + 1) % columns != 0 && i < modThumbs.Count - 1)
-                {
-                    ImGui.SameLine();
-                }
+                ImGui.TextDisabled(modThumbs.Count == 0
+                    ? "No mods matched this search."
+                    : "Every mod on this page is hosted elsewhere and hidden by the filter.");
+                return;
             }
 
+            ModGrid.DrawPage(plugin, "searchcard", visible, TextureFor, thumb =>
+            {
+                plugin.modWindow.ChangeMod(thumb);
+                plugin.MainWindow.ShowingMod = true;
+            });
         }
+
+        /// <summary>Mods de la page courante que le filtre laisse passer.</summary>
+        private List<ModThumb> VisibleThumbs => ModGrid.Visible(plugin.Configuration, modThumbs);
+
+        /// <summary>
+        /// Vignette deja chargee pour cette adresse, ou null.
+        ///
+        /// Une image dont le telechargement a echoue n'est jamais ajoutee au dictionnaire, et
+        /// l'indexeur faisait alors lever une KeyNotFoundException en pleine boucle de rendu.
+        /// </summary>
+        private IDalamudTextureWrap? TextureFor(string url)
+            => images.TryGetValue(url, out var shared) ? shared.GetWrapOrDefault() : null;
 
         /// <summary>
         /// Barre de pagination, epinglee au bas de la vue.

@@ -152,6 +152,16 @@ namespace ModArchiveBrowser.Utils
             };
         }
 
+        /// <summary>
+        /// Vrai si ce mod ne s'installera pas d'ici, et qu'on le sait.
+        ///
+        /// Archive et Heliosphere n'en sont pas : la premiere a des chances d'aboutir, la seconde
+        /// s'installe en un clic depuis l'autre plateforme. Unknown non plus, evidemment — c'est
+        /// l'absence d'information, pas une reponse negative.
+        /// </summary>
+        public static bool IsDeadEnd(ModAvailability availability)
+            => availability is ModAvailability.External or ModAvailability.Unsupported;
+
         /// <summary>Libellé affiché en infobulle sur une carte.</summary>
         public static string Describe(ModAvailability availability) => availability switch
         {

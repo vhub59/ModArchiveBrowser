@@ -36,7 +36,9 @@ This is a 3rd party plugin. If you are having problems with it, open an issue on
   rather than crawling the whole site
 - **Version history** with the author's patch notes, so an update is not a leap in the dark
 - **Availability badges** on the grid: whether a mod can be installed from here is known before
-  you click, not after
+  you click, not after — and one button hides what is known to be out of reach
+- **The whole catalogue**, not the slice the site returns by default: asking for no mod type gets
+  you xivmodarchive's own restrictive list, which leaves out poses alone — 30,381 mods
 - Adult content is off by default; when enabled it is mixed in with the rest, thumbnails
   obscured until hovered
 - Mod thumbnails are saved and shown in Penumbra, [a la Heliosphere](https://github.com/heliosphere-xiv)
@@ -105,11 +107,39 @@ twice if it has not changed.
 
 If you fork this further, please keep that part.
 
+## Tests
+
+```
+dotnet test ModArchiveBrowser.Tests/ModArchiveBrowser.Tests.csproj --filter "Category!=Live"
+```
+
+The suite is aimed at the one failure this plugin cannot detect on its own. xivmodarchive has no
+API, so every field is read out of its HTML with an XPath selector — and when the site changes its
+markup, nothing throws. Parsing quietly falls back to `Untitled`, `Unknown`, `none`, logs a warning
+nobody reads, and hands back a grid of empty-looking cards. That is how the original repository
+died.
+
+So the tests assert the *absence* of those placeholders, against pages of the site saved under
+`ModArchiveBrowser.Tests/Fixtures/`. They also pin the search URL, where every bug so far has been
+invisible: a wrong sort key the site silently ignores, a compatibility threshold that quietly
+halved the results, a missing `types` parameter that hid a third of the catalogue.
+
+`Category=Live` runs the same checks against xivmodarchive as it is right now. Saved pages prove
+the code could parse the site on the day they were captured; only the live run can tell you it
+changed since. It runs weekly in CI and opens an issue when it breaks — excluded from ordinary
+runs, because a check that fails when a third party is down teaches you to ignore failures.
+
+When the site does change: fix the selector, then refresh the saved pages so the offline suite
+matches reality again.
+
 ## Contributing
 
 Contributions are welcome. Please open an issue discussing what you want to add before you start,
-to see if it is within scope. Note that the CI workflows are inherited from the upstream repository
-and still target its configuration; releases are cut by hand until they are reworked.
+to see if it is within scope.
+
+Pushing to `master` builds and runs the offline tests. Pushing a `vX.Y.Z` tag builds the plugin,
+publishes the release, and points `repo.json` at it — so an installable release never lags behind
+the code.
 
 ## Credits
 

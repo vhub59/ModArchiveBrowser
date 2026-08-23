@@ -1,4 +1,7 @@
 .vs/
 obj/
 bin/
-*.userModArchiveBrowser.zip
+# Deux motifs s'etaient retrouves colles sur une meme ligne, ce qui n'en ignorait aucun des deux.
+*.user
+ModArchiveBrowser.zip
+TestResults/

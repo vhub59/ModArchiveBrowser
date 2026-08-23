@@ -16,6 +16,15 @@
     <PackageReference Include="Penumbra.Api" Version="5.15.1" />
   </ItemGroup>
 
+  <!--
+    Le projet de tests voit les types internes du plugin. L'alternative aurait ete de rendre
+    publics WebClient et ses voisins pour les seuls besoins des tests : une API publique n'est pas
+    faite pour cela, et rien d'exterieur ne consomme cet assemblage.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ModArchiveBrowser.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Update="ModArchiveBrowser.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

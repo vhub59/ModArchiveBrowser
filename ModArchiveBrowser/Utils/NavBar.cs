@@ -56,7 +56,48 @@ namespace ModArchiveBrowser.Utils
                 pending > 0 ? $"Updates ({pending})" : "Updates",
                 "Compare your installed mods with what xivmodarchive publishes today");
 
-            DrawAdultToggle(plugin, current);
+            //Les deux filtres de la grille, alignes a droite. Le second est calcule en premier
+            //pour connaitre la largeur a reserver : ImGui.SameLine positionne a partir du bord,
+            //il faut donc savoir ou s'arrete le voisin de droite avant de placer celui de gauche.
+            var adultWidth = DrawAdultToggle(plugin, current);
+            DrawAvailabilityToggle(plugin, adultWidth);
+        }
+
+        /// <summary>
+        /// Retire de la grille ce qu'on sait ne pas pouvoir installer.
+        ///
+        /// Le filtre ne peut pas etre pose cote XMA : le site n'expose l'hebergeur du fichier que
+        /// sur la page d'un mod, jamais dans ses resultats. Il agit donc sur ce que le
+        /// prechargement a appris de la page affichee, et laisse passer tout ce qui reste inconnu.
+        /// Une carte peut ainsi disparaitre une seconde apres etre apparue — le contraire
+        /// supposerait de bloquer l'affichage le temps d'interroger quinze pages.
+        /// </summary>
+        private static void DrawAvailabilityToggle(Plugin plugin, float rightOffset)
+        {
+            var config = plugin.Configuration;
+            var enabled = config.HideUnavailable;
+
+            var icon = enabled ? FontAwesomeIcon.Filter : FontAwesomeIcon.Bars;
+            var label = enabled ? "Installable" : "All mods";
+
+            var width = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
+            ImGui.SameLine(ImGui.GetContentRegionMax().X - rightOffset - width - ImGui.GetStyle().ItemSpacing.X);
+
+            using (enabled ? Theme.Emphasis(Theme.Accent, Theme.AccentHovered) : Theme.Emphasis(Neutral, NeutralHovered))
+            {
+                if (ImGuiComponents.IconButtonWithText(icon, label))
+                {
+                    config.HideUnavailable = !enabled;
+                    config.Save();
+                }
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(enabled
+                    ? "Mods known to be hosted elsewhere, or in a format Penumbra cannot read, are hidden.\n" +
+                      "Mods not yet checked stay visible: availability is only known once a page has been read."
+                    : "Showing everything, including mods that cannot be installed from here.\n" +
+                      "Their badge says where they live.");
         }
 
         /// <summary>
@@ -102,7 +143,8 @@ namespace ModArchiveBrowser.Utils
         /// melanges, exclusifs et exclus reste dans les options de recherche, ou les trois
         /// libelles se lisent d'un coup d'oeil sans avoir a cliquer.
         /// </summary>
-        private static void DrawAdultToggle(Plugin plugin, NavTarget current)
+        /// <returns>Largeur occupee, pour que le filtre voisin sache ou se placer.</returns>
+        private static float DrawAdultToggle(Plugin plugin, NavTarget current)
         {
             var config = plugin.Configuration;
 
@@ -136,6 +178,8 @@ namespace ModArchiveBrowser.Utils
                         ? $"Adult mods are mixed in with the rest.\n{obscured}"
                         : "Adult mods are left out entirely.\nWhile off, xivmodarchive returns 403 for them: they cannot be browsed or installed at all.");
             }
+
+            return width;
         }
 
         private static void Toggle(Plugin plugin, bool enabled)

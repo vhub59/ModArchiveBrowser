@@ -37,6 +37,12 @@ jobs:
       - name: Build
         run: dotnet build ModArchiveBrowser/ModArchiveBrowser.csproj --configuration Release --nologo
 
+      # Category!=Live exclut les tests qui interrogent xivmodarchive : une verification qui
+      # echoue parce que le site est en maintenance apprend a ignorer les echecs. Ils tournent
+      # separement, sur declenchement periodique, dans selectors.yml.
+      - name: Test
+        run: dotnet test ModArchiveBrowser.Tests/ModArchiveBrowser.Tests.csproj --nologo --filter "Category!=Live"
+
       # Verifie que le paquet est bien produit et qu'il contient ce que Dalamud attend : le manifeste
       # sert a lister le plugin, son absence ne se verrait qu'a l'installation.
       - name: Check the package
