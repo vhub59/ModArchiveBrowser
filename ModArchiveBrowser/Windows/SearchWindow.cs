@@ -46,6 +46,19 @@ namespace ModArchiveBrowser.Windows
         private string? presetUrl = null;
         //Chargement arme, execute a la premiere frame ou la capacite de la grille est connue.
         private bool pendingReload = false;
+        /// <summary>
+        /// Resultats deja obtenus, par URL.
+        ///
+        /// Chaque changement d'onglet relancait une requete, meme pour revenir sur une vue quittee
+        /// dix secondes plus tot : il n'existait qu'un seul jeu de resultats, ecrase a chaque
+        /// navigation. Les revenir-en-arriere sont desormais instantanes.
+        ///
+        /// La duree de vie est courte : les classements de XMA bougent en continu, et une liste
+        /// figee trop longtemps donnerait l'impression que le site ne repond plus.
+        /// </summary>
+        private readonly Dictionary<string, (List<ModThumb> Mods, int Total, int Pages, DateTime At)> resultCache = new();
+        private static readonly TimeSpan CacheLife = TimeSpan.FromMinutes(10);
+
         private Task searchTask = null;
         private List<ModThumb> modThumbs = new List<ModThumb>();
         ConcurrentDictionary<string, ISharedImmediateTexture> images = new ConcurrentDictionary<string, ISharedImmediateTexture>();
@@ -79,6 +92,10 @@ namespace ModArchiveBrowser.Windows
         /// </summary>
         public void UpdateSearch(string url)
         {
+            //Recliquer sur l'onglet courant ne doit rien relancer.
+            if (presetUrl == url && modThumbs is { Count: > 0 })
+                return;
+
             presetUrl = url;
             page = 1;
             pendingReload = true;
@@ -225,6 +242,22 @@ namespace ModArchiveBrowser.Windows
             var batch = Math.Clamp(pagesPerView, 1, 4);
             var firstSitePage = (page - 1) * batch + 1;
 
+            var key = $"{UrlForSitePage(firstSitePage)}|{batch}";
+            if (resultCache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.At < CacheLife)
+            {
+                modThumbs = cached.Mods;
+                totalCount = cached.Total;
+                pageCount = cached.Pages;
+
+                //Une tache deja terminee : sans cela, une recherche encore en cours laisserait
+                //l'ecran afficher "Searching..." alors que les resultats sont deja la.
+                searchTask = Task.CompletedTask;
+
+                RebuildSharedTextures();
+                plugin.prefetcher.Prefetch(modThumbs);
+                return;
+            }
+
             searchTask = Task.Run(() =>
             {
                 var collected = new List<ModThumb>();
@@ -253,6 +286,7 @@ namespace ModArchiveBrowser.Windows
                 this.modThumbs = collected;
                 this.totalCount = total;
                 this.pageCount = sitePages > 0 ? (int)Math.Ceiling(sitePages / (double)batch) : 0;
+                resultCache[key] = (collected, this.totalCount, this.pageCount, DateTime.UtcNow);
                 RebuildSharedTextures();
                 //Les pastilles doivent etre la avant qu'on ne clique, pas apres.
                 plugin.prefetcher.Prefetch(collected);
