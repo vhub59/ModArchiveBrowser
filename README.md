@@ -56,8 +56,9 @@ If you found a bug please open an issue on GitHub detailing
 
 ## How to install
 
-**This fork is currently a private repository, so the plugin repo below is not reachable.**
-Until it is published, build from source and point Dalamud at the output:
+**No release has been published from this fork yet.** The CI workflows are inherited from upstream
+and still target its configuration, so there is no plugin repository to point Dalamud at. Build from
+source in the meantime:
 
 1. Install the .NET 10 SDK
 2. `dotnet build ModArchiveBrowser/ModArchiveBrowser.csproj -c Release`
