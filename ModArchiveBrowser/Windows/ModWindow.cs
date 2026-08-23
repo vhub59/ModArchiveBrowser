@@ -34,9 +34,14 @@ namespace ModArchiveBrowser.Windows
             this.plugin = plugin;
             SizeConstraints = new WindowSizeConstraints
             {
-                MinimumSize = new Vector2(375, 330),
+                MinimumSize = new Vector2(700, 460),
                 MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
             };
+
+            //Fond opaque. La fenetre laissait voir la grille de mods au travers, si bien que la
+            //description se lisait par-dessus des vignettes : illisible des que le texte etait un
+            //peu long. La taille minimale monte aussi, deux colonnes ne tenant pas dans 375 pixels.
+            BgAlpha = 1f;
         }
 
         public void ChangeMod(ModThumb modThumb)
@@ -120,7 +125,14 @@ namespace ModArchiveBrowser.Windows
             {
                 case HtmlNodeType.Text:
                     // Reached the text of the node
-                    ImGui.TextWrapped(WebUtility.HtmlDecode(node.InnerText.Trim()));
+                    //Le HTML est indente : entre deux balises, chaque saut de ligne et chaque
+                    //tabulation forme un noeud de texte a part entiere. Sans ce filtre, chacun
+                    //produisait une ligne vide et la description se retrouvait aeree a l'exces.
+                    var text = WebUtility.HtmlDecode(node.InnerText).Trim();
+                    if (text.Length == 0)
+                        break;
+
+                    ImGui.TextWrapped(text);
                     lastNodeWasBr = false;
                     break;
 
@@ -143,7 +155,10 @@ namespace ModArchiveBrowser.Windows
                                 DrawDescHtmlFromNode(child);
                             }
                         }
-                        ImGui.NewLine(); // Add space after paragraphs
+                        //Spacing et non NewLine : NewLine insere une ligne entiere apres chaque
+                        //paragraphe, ce qui doublait deja l'interligne, et se cumulait avec les
+                        //noeuds de texte vides pour donner ces grands trous dans la description.
+                        ImGui.Spacing();
                         lastNodeWasBr = false;
                     }
                     else if (node.Name == "br")
@@ -390,37 +405,33 @@ namespace ModArchiveBrowser.Windows
                 ImGui.Separator();
 
                 // Stats
-                ImGui.Text($"Views: {mod.Value.modMeta.views}");
-                ImGui.Text($"Downloads: {mod.Value.modMeta.downloads}");
-                ImGui.Text($"Followers: {mod.Value.modMeta.pins}");
+                ImGui.TextWrapped($"Views: {mod.Value.modMeta.views}");
+                ImGui.TextWrapped($"Downloads: {mod.Value.modMeta.downloads}");
+                ImGui.TextWrapped($"Followers: {mod.Value.modMeta.pins}");
 
                 ImGui.Separator();
 
-                // Metadata
-                var race_str = string.Empty;
-                for (int i = 0; i < mod.Value.modMeta.races.Length; i++)
-                {
-                    race_str = race_str + mod.Value.modMeta.races[i] + " ,";
-                }
-                var tag_str = string.Empty;
-                for (int i = 0; i < mod.Value.modMeta.tags.Length; i++)
-                {
-                    tag_str = tag_str + mod.Value.modMeta.tags[i]+ " ,";
-                }
-                ImGui.Text($"Last Version Update: {mod.Value.modMeta.last_update}");
-                ImGui.NewLine();
-                ImGui.Text($"Affects / Replaces: {WebUtility.HtmlDecode(mod.Value.modMeta.affectReplace)}");
-                ImGui.NewLine();
-                ImGui.Text($"Races: {WebUtility.HtmlDecode(race_str)}");
-                ImGui.NewLine();
-                ImGui.TextWrapped($"{WebUtility.HtmlDecode(mod.Value.modThumb.genders)}");
-                ImGui.NewLine();
-                ImGui.TextWrapped($"Tags: {tag_str}");
+                //string.Join plutot qu'une concatenation en boucle : l'ancienne version laissait
+                //une virgule orpheline en fin de liste ("Highlander ,Elezen ,Roegadyn ,").
+                var raceList = string.Join(", ", mod.Value.modMeta.races);
+                var tagList = string.Join(", ", mod.Value.modMeta.tags);
+
+                //TextWrapped partout : la date de mise a jour de XMA est une chaine tres longue
+                //("Sat Aug 22 2026 18:22:56 GMT+0000 (Coordinated Universal Time)") et se faisait
+                //couper net au bord du panneau. Les NewLine qui separaient chaque ligne sont
+                //remplaces par Spacing, bien plus discret.
+                ImGui.TextWrapped($"Updated: {mod.Value.modMeta.last_update}");
+                ImGui.Spacing();
+                ImGui.TextWrapped($"Affects / Replaces: {WebUtility.HtmlDecode(mod.Value.modMeta.affectReplace)}");
+                ImGui.Spacing();
+                ImGui.TextWrapped($"Races: {WebUtility.HtmlDecode(raceList)}");
+                ImGui.Spacing();
+                ImGui.TextWrapped(WebUtility.HtmlDecode(mod.Value.modThumb.genders));
+                ImGui.Spacing();
+                ImGui.TextWrapped($"Tags: {tagList}");
 
                 ImGui.EndChild();
             }
-
-            ImGui.Columns(1); // End columns
         }
         public override void Draw()
         {
