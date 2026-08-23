@@ -1,14 +1,16 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Interface.Internal;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using System.Net.Http;
 using Dalamud.Bindings.ImGui;
 using HtmlAgilityPack;
 using Dalamud.Interface.Textures;
+using Dalamud.Interface.Textures.TextureWraps;
 using System.Net.Http.Headers;
 using Dalamud.Utility;
 using Dalamud.Bindings.ImGuizmo;
@@ -69,106 +71,132 @@ public class MainWindow : Window, IDisposable
             imagesTasks.TryAdd(modThumb.url_thumb, thumbnailTask);
         }
     }
+    /// <summary>
+    /// Barre de navigation.
+    ///
+    /// Les libellés d'origine ("New and Updated from Patreon Subscribers", "Today Most Viewed
+    /// Mods"...) formaient une ligne de boutons gris si large qu'elle débordait sur deux rangées.
+    /// Ils sont ramenés à un mot, l'intitulé complet passant en infobulle, et le rafraîchissement
+    /// va se ranger à droite plutôt que de casser la ligne.
+    /// </summary>
+    private void DrawToolbar()
+    {
+        if (ImGui.Button("Search"))
+        {
+            OpenSearch(null);
+        }
+        Tooltip("Search the archive with filters");
+
+        ImGui.SameLine();
+        ImGui.TextDisabled("|");
+        ImGui.SameLine();
+
+        if (ImGui.Button("Trending"))
+        {
+            OpenSearch(WebClient.today_most_viewed);
+        }
+        Tooltip("Today's most viewed mods");
+
+        ImGui.SameLine();
+        if (ImGui.Button("Newest"))
+        {
+            OpenSearch(WebClient.newest_mods_from_all_users);
+        }
+        Tooltip("Newest mods from all users");
+
+        ImGui.SameLine();
+        if (ImGui.Button("Sponsored"))
+        {
+            OpenSearch(WebClient.new_and_updated_from_patreon_subs);
+        }
+        Tooltip("New and updated mods from Patreon subscribers");
+
+        //Le bouton de rafraichissement est aligne a droite : il n'appartient pas a la navigation
+        //et occupait auparavant une deuxieme ligne a lui tout seul.
+        var label = "Refresh";
+        var buttonWidth = ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2f;
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - buttonWidth);
+
+        var busy = refreshTask is { IsCompleted: false };
+        using (ImRaii.Disabled(busy))
+        {
+            if (ImGui.Button(label))
+            {
+                refreshTask = Task.Run(Refresh);
+            }
+        }
+        Tooltip(busy ? "Loading..." : "Reload the homepage");
+    }
+
+    private static void Tooltip(string text)
+    {
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(text);
+    }
+
+    private void OpenSearch(string? presetSearch)
+    {
+        plugin.searchWindow.IsOpen = true;
+        plugin.searchWindow.BringToFront();
+
+        if (!presetSearch.IsNullOrEmpty())
+        {
+            Plugin.Logger.Debug(presetSearch);
+            plugin.searchWindow.UpdateSearch(presetSearch);
+        }
+
+        this.IsOpen = false;
+    }
+
     private void DrawHomePageTable()
     {
-        if (ImGui.Button("Search")){
-            plugin.searchWindow.IsOpen = true;
-            plugin.searchWindow.BringToFront();
-            this.IsOpen = false;
-        }
-        ImGui.SameLine();
-        if(ImGui.Button("New and Updated from Patreon Subscribers"))
+        DrawToolbar();
+        if (modThumbs == null)
+            return;
+
+        ImGui.Separator();
+
+        //Le nombre de colonnes suit la largeur de la fenetre au lieu d'etre fige a trois : sur
+        //une fenetre large, la grille laissait un vide equivalent a deux colonnes sur sa droite.
+        var available = ImGui.GetContentRegionAvail().X;
+        var columns = ModGrid.ColumnCount(available);
+        var cardWidth = ModGrid.CardWidth(available, columns);
+
+        for (var i = 0; i < modThumbs.Count; i++)
         {
-            plugin.searchWindow.IsOpen = true;
-            plugin.searchWindow.BringToFront();
-            Plugin.Logger.Debug(WebClient.new_and_updated_from_patreon_subs);
-            plugin.searchWindow.UpdateSearch(WebClient.new_and_updated_from_patreon_subs);
-            this.IsOpen = false;
-        }
-        ImGui.SameLine();
-        if (ImGui.Button("Today Most Viewed Mods"))
-        {
-            plugin.searchWindow.IsOpen = true;
-            plugin.searchWindow.BringToFront();
-            Plugin.Logger.Debug(WebClient.today_most_viewed);
-            plugin.searchWindow.UpdateSearch(WebClient.today_most_viewed);
-            this.IsOpen = false;
-        }
-        ImGui.SameLine();
-        if (ImGui.Button("Newest Mods from All Users"))
-        {
-            plugin.searchWindow.IsOpen = true;
-            plugin.searchWindow.BringToFront();
-            Plugin.Logger.Debug(WebClient.newest_mods_from_all_users);
-            plugin.searchWindow.UpdateSearch(WebClient.newest_mods_from_all_users);
-            this.IsOpen = false;
-        }
-        if (ImGui.Button("Refresh homepage"))
-        {
-             refreshTask = Task.Run(() =>
+            var thumb = modThumbs[i];
+
+            //TryGetValue et non l'indexeur : RebuildSharedTextures lance les telechargements sans
+            //etre attendu, si bien que refreshTask est terminee bien avant les vignettes. Une
+            //image encore absente, ou dont le telechargement a echoue, faisait lever une
+            //KeyNotFoundException en pleine boucle de rendu.
+            IDalamudTextureWrap? texture = null;
+            if (images.TryGetValue(thumb.url_thumb, out var shared))
+                texture = shared.GetWrapOrDefault();
+
+            if (ModGrid.Draw($"##homecard{i}", thumb, texture, cardWidth))
             {
-                    Refresh();
-            });
-        }
-        int modCount = 0;
-        foreach (ModThumb thumb in modThumbs)
-            {
-                ImGui.BeginGroup();
-                if (refreshTask != null && refreshTask.IsCompleted)
+                try
                 {
-                    var modThumbnail = images[thumb.url_thumb].GetWrapOrDefault();
-                    if (modThumbnail != null)
+                    plugin.modWindow.ChangeMod(thumb);
+                    if (!plugin.modWindow.IsOpen)
                     {
-                        if (ImGui.ImageButton(modThumbnail.Handle,
-                                              new Vector2(modThumbnail.Width, modThumbnail.Height)))
-                        {
-                            try
-                            {
-                                plugin.modWindow.ChangeMod(thumb);
-                                if (!plugin.modWindow.IsOpen)
-                                {
-                                    plugin.modWindow.Toggle();
-                                }
-
-                                plugin.modWindow.BringToFront();
-                            }
-                            catch (Exception e)
-                            {
-                                Plugin.ReportError("Error while loading mod,check /xllog for details", e);
-                            }
-                        }
+                        plugin.modWindow.Toggle();
                     }
+
+                    plugin.modWindow.BringToFront();
                 }
-                else
+                catch (Exception e)
                 {
-                    ImGui.Button("Loading....", new Vector2(355, 200));
+                    Plugin.ReportError("Error while loading mod,check /xllog for details", e);
                 }
-
-                ImGui.TextWrapped(thumb.name);
-
-                ImGui.Text($"By: {thumb.author}");
-
-                ImGui.Text($"{thumb.type}");
-                ImGui.Text($"{thumb.genders}");
-
-                ImGui.SameLine(0, 100);  // Adjust the padding to float it to the right
-                ImGui.Text($"{thumb.views}");
-
-                ImGui.EndGroup();
-
-            if ((modCount + 1) % 3 != 0)  //3 card layout like xivmodarchive
-            {
-                ImGui.SameLine();  
-            }
-            else
-            {
-                ImGui.NewLine();  
             }
 
-            modCount++;
-
+            if ((i + 1) % columns != 0 && i < modThumbs.Count - 1)
+            {
+                ImGui.SameLine();
+            }
         }
-       
     }
 
     public override void Draw()

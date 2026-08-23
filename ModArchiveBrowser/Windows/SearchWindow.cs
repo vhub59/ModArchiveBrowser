@@ -1,4 +1,5 @@
 ﻿using System;
+using Dalamud.Interface.Textures.TextureWraps;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
@@ -227,63 +228,53 @@ namespace ModArchiveBrowser.Windows
 
         public void DrawSearchResults()
         {
-            int modCount = 0;
-            foreach (ModThumb thumb in modThumbs)
+            if (modThumbs == null)
+                return;
+
+            //Meme grille que la page d'accueil : colonnes calculees sur la largeur disponible,
+            //cartes de hauteur constante, vignettes au bon ratio. Les deux fenetres portaient
+            //jusqu'ici le meme code duplique, avec les memes defauts.
+            var available = ImGui.GetContentRegionAvail().X;
+            var columns = ModGrid.ColumnCount(available);
+            var cardWidth = ModGrid.CardWidth(available, columns);
+
+            for (var i = 0; i < modThumbs.Count; i++)
             {
-                ImGui.BeginGroup();
-                if (imagesTasks[thumb.url_thumb] != null && imagesTasks[thumb.url_thumb].Status == TaskStatus.RanToCompletion)
+                var thumb = modThumbs[i];
+
+                //TryGetValue et non l'indexeur : une vignette dont le telechargement a echoue
+                //n'est jamais ajoutee au dictionnaire et faisait lever une KeyNotFoundException
+                //en pleine boucle de rendu.
+                IDalamudTextureWrap? texture = null;
+                if (images.TryGetValue(thumb.url_thumb, out var shared))
+                    texture = shared.GetWrapOrDefault();
+
+                if (ModGrid.Draw($"##searchcard{i}", thumb, texture, cardWidth))
                 {
-                    var modThumbnail = images[thumb.url_thumb].GetWrapOrDefault();
-                    if (modThumbnail != null)
+                    try
                     {
-                        if (ImGui.ImageButton(modThumbnail.Handle,
-                                              new Vector2(modThumbnail.Width, modThumbnail.Height)))
+                        plugin.modWindow.ChangeMod(thumb);
+                        if (!plugin.modWindow.IsOpen)
                         {
-                            try
-                            {
-                                plugin.modWindow.ChangeMod(thumb);
-                                if (!plugin.modWindow.IsOpen)
-                                {
-                                    plugin.modWindow.Toggle();
-                                }
-                            }
-                            catch (Exception e)
-                            {
-                                Plugin.ReportError("Error while loading mod,check /xllog for details", e);
-                            }
+                            plugin.modWindow.Toggle();
                         }
+
+                        plugin.modWindow.BringToFront();
+                    }
+                    catch (Exception e)
+                    {
+                        Plugin.ReportError("Error while loading mod,check /xllog for details", e);
                     }
                 }
-                else
-                { 
-                    ImGui.Button("Loading....", new Vector2(355, 200));
-                }
-                
 
-                ImGui.TextWrapped(thumb.name);
-
-                ImGui.Text($"By: {thumb.author}");
-
-                ImGui.Text($"{thumb.type}");
-                ImGui.Text($"{thumb.genders}");
-
-                ImGui.SameLine(0, 100);  // Adjust the padding to float it to the right
-                ImGui.Text($"{thumb.views}");
-
-                ImGui.EndGroup();
-
-                if ((modCount + 1) % 3 != 0)  //3 card layout like xivmodarchive
+                if ((i + 1) % columns != 0 && i < modThumbs.Count - 1)
                 {
                     ImGui.SameLine();
                 }
-                else
-                {
-                    ImGui.NewLine();
-                }
-
-                modCount++;
-
             }
+
+            ImGui.Spacing();
+            ImGui.Separator();
             float windowWidth = ImGui.GetWindowWidth();
             float buttonWidth = 100;
 
