@@ -1,4 +1,4 @@
-using Dalamud.Configuration;
+﻿using Dalamud.Configuration;
 using Dalamud.Plugin;
 using System;
 using System.Collections.Generic;
@@ -20,6 +20,15 @@ public class Configuration : IPluginConfiguration
     public HashSet<string> CacheFiles { get; set; } = new HashSet<string>();
     public Dictionary<string, string> modNameToThumbnail = new Dictionary<string, string>();
     public bool penumbraDispThumb = true;
+
+    /// <summary>
+    /// Accord explicite de l'utilisateur pour le contenu adulte. Désactivé par défaut.
+    ///
+    /// Tant qu'il est faux, la session anonyme n'est pas ouverte : XMA répond 403 sur ces pages
+    /// et le plugin ne peut donc ni les afficher ni les installer, même par accident. C'est plus
+    /// solide qu'un filtre côté client, qu'un oubli de condition suffirait à contourner.
+    /// </summary>
+    public bool AllowNsfw { get; set; } = false;
 
     // the below exist just to make saving less cumbersome
     public void Save()

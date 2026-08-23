@@ -42,9 +42,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
-        //Ouvre la session anonyme XMA en tâche de fond. Sans elle, toute page NSFW répond 403.
-        //On ne bloque pas le chargement : la session sera prête avant la première recherche.
-        _ = XmaSession.EnsureAsync();
+        //La session anonyme XMA n'est ouverte que si l'utilisateur a donné son accord pour le
+        //contenu adulte. Sans elle, XMA répond 403 sur ces pages : le filtrage tient côté serveur.
+        //On n'attend pas : la session sera prête bien avant la première recherche.
+        if (Configuration.AllowNsfw)
+            _ = XmaSession.EnsureAsync();
 
         // you might normally want to embed resources and load them from the manifest stream
         //var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");

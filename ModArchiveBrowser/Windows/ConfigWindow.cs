@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using System.Collections.Generic;
 using Dalamud.Interface.Windowing;
@@ -94,6 +94,27 @@ public class ConfigWindow : Window, IDisposable
         {
             Configuration.penumbraDispThumb = penumbraDispThumb;
             Configuration.Save();
+        }
+
+        //Cocher ouvre la session anonyme XMA, décocher la ferme et jette le cookie.
+        //Le réglage ne se contente donc pas de masquer : il coupe l'accès à la source.
+        var allowNsfw = Configuration.AllowNsfw;
+        if (ImGui.Checkbox("Show adult (NSFW) mods", ref allowNsfw))
+        {
+            Configuration.AllowNsfw = allowNsfw;
+            Configuration.Save();
+
+            if (allowNsfw)
+                _ = XmaSession.EnsureAsync();
+            else
+                XmaSession.Close();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "Off by default. While off, xivmodarchive returns 403 for adult mods,\n" +
+                "so they cannot be browsed or installed at all.");
         }
         var cacheSize = Configuration.CacheSize;
         var thumbnailsPath = Configuration.ThumbnailsFolder;

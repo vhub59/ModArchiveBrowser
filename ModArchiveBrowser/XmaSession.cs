@@ -90,6 +90,26 @@ namespace ModArchiveBrowser
             Plugin.Logger.Debug("XMA session invalidated, will reopen on next request.");
         }
 
+        /// <summary>
+        /// Ferme la session et jette le cookie. Appelé quand l'utilisateur retire son accord
+        /// pour le contenu NSFW : XMA redevient alors incapable de servir ces pages, ce qui vaut
+        /// mieux qu'un simple filtre d'affichage côté plugin.
+        ///
+        /// CookieContainer n'expose pas de Clear ; marquer les cookies expirés les retire du
+        /// conteneur et les empêche d'être renvoyés.
+        /// </summary>
+        public static void Close()
+        {
+            foreach (Cookie c in Cookies.GetCookies(new Uri(Root)))
+                c.Expired = true;
+
+            _established = false;
+            Plugin.Logger.Information("XMA session closed, NSFW content unreachable again.");
+        }
+
+        /// <summary>Vrai si la session anonyme est ouverte.</summary>
+        public static bool IsEstablished => _established;
+
         /// <summary>En-tête Cookie pour les couches qui ne savent pas manipuler un CookieContainer.</summary>
         public static string CookieHeader()
         {

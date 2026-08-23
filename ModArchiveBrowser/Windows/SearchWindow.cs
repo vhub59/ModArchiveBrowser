@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
@@ -143,13 +143,26 @@ namespace ModArchiveBrowser.Windows
                     }
 
                     // NSFW Toggle
-                    bool nsfwSelected = selectedNSFW == NSFW.True;
-                    ImGui.BeginDisabled();
+                    //La case était désactivée en dur : sans session, XMA répondait 403 sur ces
+                    //pages et le filtre n'aurait mené qu'à des erreurs. /anon_login la rend
+                    //utilisable, mais seulement si l'utilisateur a donné son accord.
+                    bool nsfwAllowed = plugin.Configuration.AllowNsfw;
+                    bool nsfwSelected = nsfwAllowed && selectedNSFW == NSFW.True;
+
+                    ImGui.BeginDisabled(!nsfwAllowed);
                     if (ImGui.Checkbox("NSFW", ref nsfwSelected))
                     {
                         selectedNSFW = nsfwSelected ? NSFW.True : NSFW.False;
                     }
                     ImGui.EndDisabled();
+
+                    if (!nsfwAllowed)
+                    {
+                        //Accord retiré en cours de session : un ancien choix ne doit pas survivre.
+                        selectedNSFW = NSFW.False;
+                        if (ImGui.IsItemHovered())
+                            ImGui.SetTooltip("Enable \"Show adult (NSFW) mods\" in the plugin settings first.");
+                    }
                     // DT Compatibility Dropdown
                     string[] dtCompatOptions = { "Compatible", "Tex Tools partial","Partial Compatibility","Not compatible" };
                     int dtCompatIndex = (int)selectedDTCompat;
