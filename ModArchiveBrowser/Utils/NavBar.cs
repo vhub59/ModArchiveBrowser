@@ -42,6 +42,8 @@ namespace ModArchiveBrowser.Utils
             Tab(plugin, current, NavTarget.Newest, FontAwesomeIcon.Certificate, "Newest", "Newest mods from all users");
             ImGui.SameLine();
             Tab(plugin, current, NavTarget.Sponsored, FontAwesomeIcon.Star, "Sponsored", "New and updated mods from Patreon subscribers");
+
+            DrawAdultToggle(plugin);
         }
 
         /// <summary>
@@ -67,6 +69,66 @@ namespace ModArchiveBrowser.Utils
                 detail += $"  ·  showing {shown:N0}";
 
             ImGui.TextDisabled($"·  {detail}");
+        }
+
+        /// <summary>
+        /// Bascule du contenu adulte, alignee a droite de la barre.
+        ///
+        /// Le reglage existait deja mais dormait dans la fenetre de configuration, alors qu'on le
+        /// bascule souvent. Il ne se contente pas de masquer : decoche, la session anonyme est
+        /// fermee et le cache HTML purge, si bien que XMA repond 403 sur ces pages. Le filtrage
+        /// tient cote serveur, pas cote affichage.
+        ///
+        /// Le libelle dit "Adult only" et non "Adult", car le filtre de XMA est exclusif : il
+        /// remplace les resultats au lieu de les completer. Mesure faite sur le tag bibo+, 3391
+        /// resultats sans le parametre contre 1281 avec, sans recouvrement.
+        /// </summary>
+        private static void DrawAdultToggle(Plugin plugin)
+        {
+            var enabled = plugin.Configuration.AllowNsfw;
+            var icon = enabled ? FontAwesomeIcon.Eye : FontAwesomeIcon.EyeSlash;
+            var label = enabled ? "Adult only" : "Adult off";
+
+            var width = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
+            ImGui.SameLine(ImGui.GetContentRegionMax().X - width);
+
+            using (enabled ? Theme.Emphasis(Warm, WarmHovered) : Theme.Emphasis(Neutral, NeutralHovered))
+            {
+                if (ImGuiComponents.IconButtonWithText(icon, label))
+                    Toggle(plugin, !enabled);
+            }
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(enabled
+                    ? "Showing adult mods only.\nxivmodarchive cannot mix adult and regular results in one search."
+                    : "Adult mods are hidden.\nWhile off, xivmodarchive returns 403 for them: they cannot be browsed or installed at all.");
+            }
+        }
+
+        private static readonly Vector4 Warm = new(0.72f, 0.31f, 0.44f, 1f);
+        private static readonly Vector4 WarmHovered = new(0.80f, 0.38f, 0.51f, 1f);
+        private static readonly Vector4 Neutral = new(0.18f, 0.19f, 0.22f, 1f);
+        private static readonly Vector4 NeutralHovered = new(0.26f, 0.28f, 0.32f, 1f);
+
+        private static void Toggle(Plugin plugin, bool enabled)
+        {
+            plugin.Configuration.AllowNsfw = enabled;
+            plugin.Configuration.Save();
+
+            if (enabled)
+            {
+                _ = XmaSession.EnsureAsync();
+            }
+            else
+            {
+                XmaSession.Close();
+                //Sans cette purge, les pages adultes deja consultees seraient resservies depuis
+                //le cache disque sans jamais repasser par le 403 de XMA.
+                WebClient.ClearHtmlCache();
+            }
+
+            plugin.searchWindow.ApplyAdultMode(enabled);
         }
 
         private static void Tab(Plugin plugin, NavTarget current, NavTarget target, FontAwesomeIcon icon, string label, string tooltip)

@@ -147,6 +147,22 @@ namespace ModArchiveBrowser.Windows
             ImGui.EndChild();
         }
 
+        /// <summary>
+        /// Applique la bascule du contenu adulte et recharge la vue.
+        ///
+        /// Le filtre de XMA etant exclusif, activer ne complete pas la liste : il la remplace par
+        /// les seuls mods adultes. Le rechargement est donc indispensable, l'ancienne liste
+        /// n'ayant plus rien a voir avec la nouvelle.
+        /// </summary>
+        public void ApplyAdultMode(bool enabled)
+        {
+            selectedNSFW = enabled ? NSFW.True : NSFW.False;
+
+            //Rien a recharger tant qu'aucune recherche n'a eu lieu.
+            if (searchTask != null || presetUrl != null)
+                RunSearch(1);
+        }
+
         public void DrawSearchHeader()
         {
             //Le libelle du champ ("Search for mods...") s'affichait a sa droite, colle au bouton
@@ -235,7 +251,15 @@ namespace ModArchiveBrowser.Windows
         /// construite a partir des filtres.
         /// </summary>
         private string UrlForSitePage(int sitePage)
-            => presetUrl != null ? $"{presetUrl}&page={sitePage}" : BuildUrl(sitePage);
+        {
+            if (presetUrl == null)
+                return BuildUrl(sitePage);
+
+            //Les prereglages ne portent pas de parametre nsfw : XMA sert alors du tout-public.
+            //On l'ajoute pour que la bascule s'applique aussi a Trending, Newest et Sponsored.
+            var adult = selectedNSFW == NSFW.True ? "&nsfw=true" : string.Empty;
+            return $"{presetUrl}{adult}&page={sitePage}";
+        }
 
         private string BuildUrl(int sitePage) => WebClient.BuildSearchURL(
             selectedSortBy,
