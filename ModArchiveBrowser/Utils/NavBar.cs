@@ -112,17 +112,20 @@ namespace ModArchiveBrowser.Utils
             //parametre de recherche, donc aucun filtre.
             var applicable = current != NavTarget.Home;
 
-            var (icon, label, tint) = !config.AllowNsfw
-                ? (FontAwesomeIcon.EyeSlash, "Adult hidden", Neutral)
+            //Chaque etat a sa couleur de repos et sa couleur de survol. Les passer identiques,
+            //comme je l'avais fait, prive le bouton de toute reaction : il ressemble alors a un
+            //bouton ordinaire qui refuse de s'allumer, ce qui se lit comme un defaut.
+            var (icon, label, tint, hover) = !config.AllowNsfw
+                ? (FontAwesomeIcon.EyeSlash, "Adult hidden", Neutral, NeutralHovered)
                 : config.BlurAdultThumbnails
-                    ? (FontAwesomeIcon.LowVision, "Adult blurred", Warm)
-                    : (FontAwesomeIcon.Eye, "Adult shown", WarmHovered);
+                    ? (FontAwesomeIcon.LowVision, "Adult blurred", Warm, WarmHovered)
+                    : (FontAwesomeIcon.Eye, "Adult shown", WarmHovered, Warm);
 
             var width = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
             ImGui.SameLine(ImGui.GetContentRegionMax().X - width);
 
             using (ImRaii.Disabled(!applicable))
-            using (Theme.Emphasis(tint, tint))
+            using (Theme.Emphasis(tint, hover))
             {
                 if (ImGuiComponents.IconButtonWithText(icon, label))
                     Cycle(plugin);
@@ -158,6 +161,9 @@ namespace ModArchiveBrowser.Utils
             else
             {
                 config.AllowNsfw = false;
+                //On remet le masquage : le cycle repart ainsi toujours de "hidden" vers
+                //"blurred", et jamais directement vers "shown".
+                config.BlurAdultThumbnails = true;
                 XmaSession.Close();
                 //Sans cette purge, les pages adultes deja consultees seraient resservies depuis
                 //le cache disque sans jamais repasser par le 403 de XMA.
