@@ -14,6 +14,7 @@ using SharpCompress.Archives.SevenZip;
 using SharpCompress.Common;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Textures;
+using ModArchiveBrowser.Utils;
 namespace ModArchiveBrowser
 {
     public class ModHandler : IDisposable
@@ -45,6 +46,9 @@ namespace ModArchiveBrowser
                 Directory.CreateDirectory(_thumbnailDirectory);
             }
             NormalizeCacheKeys();
+            //Le cache de mods n'etait borne par rien : 532 Mo apres une seule journee, sans que
+            //rien ne l'arrete jamais.
+            StaticHelpers.PruneCache(_downloadDirectory, plugin.Configuration.CacheSize);
             UpdateTextures();
         }
 

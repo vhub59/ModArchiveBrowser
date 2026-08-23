@@ -118,6 +118,60 @@ namespace ModArchiveBrowser.Utils
             ImGui.SetCursorPosX((int)((ImGui.GetWindowWidth() - itemWidth) / 2));
 
         /// <summary>
+        /// Ramene un dossier de cache sous la taille autorisee, en supprimant les fichiers les
+        /// plus anciennement utilises.
+        ///
+        /// Aucun des deux caches du plugin n'etait borne : le dossier de mods atteignait 532 Mo
+        /// apres une seule journee d'utilisation, et rien ne l'aurait jamais arrete. Un cache dont
+        /// on ne peut pas prevoir la taille finit par etre un probleme pour l'utilisateur.
+        ///
+        /// La suppression part des fichiers les plus vieux : ce sont ceux qu'on a le moins de
+        /// chances de redemander, et un mod recemment installe reste ainsi disponible.
+        /// </summary>
+        public static void PruneCache(string directory, long maxMegabytes)
+        {
+            try
+            {
+                if (maxMegabytes <= 0 || !Directory.Exists(directory))
+                    return;
+
+                var budget = maxMegabytes * 1024L * 1024L;
+                var files = new DirectoryInfo(directory)
+                    .GetFiles("*", SearchOption.TopDirectoryOnly)
+                    .OrderByDescending(f => f.LastAccessTimeUtc)
+                    .ToList();
+
+                long kept = 0;
+                var removed = 0;
+
+                foreach (var file in files)
+                {
+                    kept += file.Length;
+                    if (kept <= budget)
+                        continue;
+
+                    try
+                    {
+                        file.Delete();
+                        removed++;
+                    }
+                    catch (IOException)
+                    {
+                        //Fichier verrouille : on le laisse et on continue avec les suivants.
+                        kept -= file.Length;
+                    }
+                }
+
+                if (removed > 0)
+                    Plugin.Logger.Information($"Cache pruned: {removed} file(s) removed from {directory}.");
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.Warning($"Could not prune {directory}: {e.Message}");
+            }
+        }
+
+        /// <summary>
         /// Cadre neutre occupant la place d'une image absente ou en cours de chargement.
         ///
         /// Remplace les boutons "Failed to ..." qui traînaient dans l'interface : une image qui

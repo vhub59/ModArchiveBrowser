@@ -38,6 +38,10 @@ namespace ModArchiveBrowser
             {
                 Directory.CreateDirectory(_downloadDirectory);
             }
+
+            //Les vignettes sont petites mais nombreuses : 250 Mo laissent de quoi parcourir
+            //longuement le catalogue sans que le dossier ne grossisse indefiniment.
+            StaticHelpers.PruneCache(_downloadDirectory, 250);
         }
 
         /// <summary>
@@ -116,9 +120,16 @@ namespace ModArchiveBrowser
             _downloaded.Clear();
         }
 
+        /// <summary>
+        /// Ne supprime rien.
+        ///
+        /// Le dechargement du plugin vidait auparavant tout le dossier : chaque vignette etait
+        /// donc retelechargee a la session suivante, alors qu'aucune n'avait change. Du gaspillage
+        /// pur, pour l'utilisateur comme pour XMA. Le cache se vide a la demande depuis la
+        /// configuration, ou automatiquement quand il depasse la taille autorisee.
+        /// </summary>
         public void Dispose()
         {
-            StaticHelpers.ClearCacheFully(_downloadDirectory);
         }
     }
 }

@@ -281,14 +281,46 @@ namespace ModArchiveBrowser.Windows
 
         private void DrawLink(HtmlNode node)
         {
-            string url = node.GetAttributeValue("href", string.Empty);
-            string linkText = node.InnerText.Trim();
+            //Le clic ne faisait rien : l'auteur avait laisse "//later" a la place. Or beaucoup de
+            //descriptions renvoient vers des dependances indispensables — une base de corps, une
+            //texture, un Discord — et le lien s'affichait en bleu, invitant a cliquer dans le vide.
+            var url = WebUtility.HtmlDecode(node.GetAttributeValue("href", string.Empty)).Trim();
+            var linkText = WebUtility.HtmlDecode(node.InnerText).Trim();
 
-            // Render link text as a clickable item
-            ImGui.TextColored(new Vector4(0.1f, 0.4f, 1.0f, 1.0f), linkText);
-            if (ImGui.IsItemClicked())
+            if (linkText.Length == 0)
+                return;
+
+            //Un lien relatif pointe vers XMA lui-meme : on le complete pour qu'il reste ouvrable.
+            if (url.StartsWith('/'))
+                url = WebClient.xivmodarchiveRoot + url;
+
+            var color = new Vector4(0.28f, 0.56f, 0.95f, 1f);
+            ImGui.TextColored(color, linkText);
+
+            if (ImGui.IsItemHovered())
             {
-                //later
+                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+                //Souligne au survol : la couleur seule ne signale pas qu'on peut cliquer.
+                var min = ImGui.GetItemRectMin();
+                var max = ImGui.GetItemRectMax();
+                ImGui.GetWindowDrawList().AddLine(
+                    new Vector2(min.X, max.Y), new Vector2(max.X, max.Y), ImGui.GetColorU32(color));
+
+                if (!url.IsNullOrEmpty())
+                    ImGui.SetTooltip(url);
+            }
+
+            if (ImGui.IsItemClicked() && !url.IsNullOrEmpty())
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch (Exception e)
+                {
+                    Plugin.ReportError($"Could not open {url}", e);
+                }
             }
 
             ImGui.SameLine(); // Ensure links are inline
@@ -296,6 +328,11 @@ namespace ModArchiveBrowser.Windows
 
         private void StartInstall()
         {
+            //Un second clic pendant un telechargement lancait une deuxieme tache sur le meme mod.
+            //Constate en test : le message d'erreur est apparu deux fois pour un seul mod.
+            if (_isLoading)
+                return;
+
             _isLoading = true;
             Task.Run(() =>
             {
