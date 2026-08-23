@@ -1,13 +1,25 @@
 # ModArchiveBrowser
 
+> **This is a fork. The original plugin was written by [Noevain](https://github.com/Noevain), at
+> [Noevain/ModArchiveBrowser](https://github.com/Noevain/ModArchiveBrowser).**
+>
+> The idea, the architecture and the whole first implementation are theirs. This fork updates it and
+> builds on it — it did not start from a blank page.
+>
+> GitHub does not display the relationship, because this repository was created separately rather
+> than forked through the site. Hence this notice.
+
 Browse [xivmodarchive.com](https://www.xivmodarchive.com/) from inside FFXIV and install mods into
 Penumbra in one click.
 
-This is a fork of [Noevain/ModArchiveBrowser](https://github.com/Noevain/ModArchiveBrowser), which
-stopped being updated in December 2024 and no longer loaded: Dalamud has moved from API 11 to 15 and
-from .NET 8 to .NET 10 since. The fork brings it back and goes further.
+## Why this fork exists
 
-Licensed AGPL-3.0, like the original.
+The original stopped being updated in December 2024 and no longer loads: Dalamud has moved from API
+11 to 15 and from .NET 8 to .NET 10 since, and two of its page selectors broke when xivmodarchive
+changed its markup. This fork brings it back, then adds update checking, availability badges,
+adult-content handling and a rebuilt interface.
+
+Licensed AGPL-3.0, like the original, and it stays that way.
 
 ## !!Disclaimer!!
 
@@ -91,6 +103,15 @@ If you fork this further, please keep that part.
 Contributions are welcome. Please open an issue discussing what you want to add before you start,
 to see if it is within scope. Note that the CI workflows are inherited from the upstream repository
 and still target its configuration; they need rework before any release from this fork.
+
+## Credits
+
+The original plugin is the work of [Noevain](https://github.com/Noevain). Everything this fork does
+rests on their design: the in-game grid, the Penumbra integration, the page parsing. Where this fork
+fixed bugs, they were bugs in code that already worked well enough to be worth fixing.
+
+Upstream is kept as a git remote, and the migration can be offered back as a pull request if they
+ever want it.
 
 ## Supporting
 
