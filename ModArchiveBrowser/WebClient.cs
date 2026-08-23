@@ -129,12 +129,17 @@ namespace ModArchiveBrowser
 
         public static (Mod,HtmlNodeCollection) GetModPage(string modId)
         {
-            string url = xivmodarchiveRoot+"/modid/"+modId;
+            //ModThumb.url attend un chemin relatif ("/modid/62528"), pas l'identifiant nu :
+            //c'est lui que "Open in browser" concatène à la racine du site. En y mettant "62528",
+            //la commande /modid produisait l'URL "https://www.xivmodarchive.com62528".
+            //Le defaut ne se voyait que par cette commande, jamais en passant par la recherche.
+            string relativePath = "/modid/" + modId;
+            string url = xivmodarchiveRoot + relativePath;
             Plugin.Logger.Debug($"{url}");
             HtmlDocument page = ClientInstance.Load(url);
             HtmlNodeCollection descriptionNodeStart = page.DocumentNode.SelectNodes("//div[@id='info']");
             Plugin.Logger.Debug("Request made");
-            ModThumb mdThumb = GetModThumbFromFullPage(page,modId);
+            ModThumb mdThumb = GetModThumbFromFullPage(page,relativePath);
             return(ParseModPage(page,mdThumb),descriptionNodeStart);
         }
 
