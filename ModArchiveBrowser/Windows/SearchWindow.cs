@@ -38,6 +38,8 @@ namespace ModArchiveBrowser.Windows
         //Total de la recherche et nombre de pages, distincts du contenu de la page courante.
         private int totalCount = 0;
         private int pageCount = 0;
+        //Pages XMA necessaires pour remplir la grille, recalcule a chaque frame.
+        private int pagesPerView = 1;
         private Task searchTask = null;
         private List<ModThumb> modThumbs = new List<ModThumb>();
         ConcurrentDictionary<string, ISharedImmediateTexture> images = new ConcurrentDictionary<string, ISharedImmediateTexture>();
@@ -57,40 +59,14 @@ namespace ModArchiveBrowser.Windows
 
         }
         //Search Url should already have been built before being passed
-        public void UpdateSearch(string url) => UpdateSearch(url, false);
-
-        /// <summary>
-        /// Charge une page de resultats, en remplacement ou a la suite des precedentes.
-        ///
-        /// XMA sert quinze mods par page et n'accepte aucun parametre pour en servir davantage :
-        /// per_page, limit, pageSize, count et results ont tous ete essayes, tous renvoient
-        /// quinze. Afficher plus suppose donc plusieurs requetes, faites a la demande plutot
-        /// qu'a chaque affichage.
-        /// </summary>
-        public void UpdateSearch(string url, bool append)
+        public void UpdateSearch(string url)
         {
             searchTask = Task.Run(() =>
             {
-                var searchRes = WebClient.DoSearch(url);
-
-                if (append && this.modThumbs != null)
-                {
-                    //Un meme mod peut revenir sur deux pages si son classement bouge entre les
-                    //deux requetes. On remplace la liste entiere plutot que d'y ajouter en place :
-                    //la boucle de rendu la lit pendant ce temps, et un echange de reference est
-                    //atomique la ou une insertion ne l'est pas.
-                    var seen = new HashSet<string>(this.modThumbs.Select(m => m.url));
-                    this.modThumbs = this.modThumbs
-                        .Concat(searchRes.Mods.Where(m => seen.Add(m.url)))
-                        .ToList();
-                }
-                else
-                {
-                    this.modThumbs = searchRes.Mods;
-                }
-
-                this.totalCount = searchRes.TotalCount;
-                this.pageCount = searchRes.PageCount;
+                var res = WebClient.DoSearch(url);
+                this.modThumbs = res.Mods;
+                this.totalCount = res.TotalCount;
+                this.pageCount = res.PageCount;
                 RebuildSharedTextures();
             });
         }
@@ -129,6 +105,13 @@ namespace ModArchiveBrowser.Windows
             //restante. Les filtres gardent ainsi une place bornee en haut et les resultats sont
             //toujours visibles : il fallait auparavant replier les options pour les apercevoir.
             ImGui.Separator();
+
+            //La capacite de la grille est mesuree ici, a l'endroit ou l'on connait la place
+            //reellement disponible : c'est elle qui decide combien de pages XMA une page
+            //d'affichage agrege.
+            pagesPerView = Math.Clamp(
+                (int)Math.Ceiling(ModGrid.Capacity(ImGui.GetContentRegionAvail()) / 15.0), 1, 4);
+
             if (ImGui.BeginChild("searchresults", new Vector2(0, 0), false))
             {
                 if (modThumbs != null && modThumbs.Count > 0 && searchTask is { Status: TaskStatus.RanToCompletion })
@@ -178,36 +161,71 @@ namespace ModArchiveBrowser.Windows
         }
 
         /// <summary>
-        /// Lance une recherche sur la page demandée.
+        /// Charge une page d'affichage.
         ///
-        /// La construction de l'URL était recopiée à l'identique en trois endroits — le bouton
-        /// Search, la page precedente et la page suivante — avec quatorze parametres chacun. Un
-        /// filtre ajoute a un seul des trois aurait suffi a rendre la pagination incoherente.
+        /// XMA sert quinze mods par requete et n'accepte aucun parametre pour en servir
+        /// davantage : per_page, limit, pageSize, count et results ont tous ete essayes, tous
+        /// renvoient quinze. Une page large en affiche pourtant une trentaine sans defilement.
+        /// On agrege donc autant de pages du site qu'il en faut pour remplir la grille, et la
+        /// pagination avance par blocs de cette taille.
+        ///
+        /// Le nombre de requetes est plafonne a quatre : au-dela, un simple clic sur la fleche
+        /// declencherait une rafale vers XMA pour un gain d'affichage negligeable.
         /// </summary>
-        private void RunSearch(int targetPage, bool append = false)
+        private void RunSearch(int targetPage)
         {
             page = Math.Max(1, targetPage);
 
-            var url = WebClient.BuildSearchURL(
-                selectedSortBy,
-                selectedSortOrder,
-                basicText: searchQuery,
-                nsfw: selectedNSFW,
-                name: modName,
-                author: modAuthor,
-                gender: selectedGender,
-                race: modRaces,
-                tags: modTags,
-                affects: modAffects,
-                comments: modComments,
-                dtCompatibility: selectedDTCompat,
-                types: selectedType,
-                page: page
-            );
+            var batch = Math.Clamp(pagesPerView, 1, 4);
+            var firstSitePage = (page - 1) * batch + 1;
 
-            Plugin.Logger.Debug(url);
-            UpdateSearch(url, append);
+            searchTask = Task.Run(() =>
+            {
+                var collected = new List<ModThumb>();
+                var seen = new HashSet<string>();
+                var total = 0;
+                var sitePages = 0;
+
+                for (var offset = 0; offset < batch; offset++)
+                {
+                    var res = WebClient.DoSearch(BuildUrl(firstSitePage + offset));
+                    total = res.TotalCount;
+                    sitePages = res.PageCount;
+
+                    //Un meme mod peut revenir d'une requete a l'autre si son classement bouge
+                    //entre les deux, le tri du jour evoluant en continu.
+                    foreach (var mod in res.Mods)
+                    {
+                        if (seen.Add(mod.url))
+                            collected.Add(mod);
+                    }
+
+                    if (sitePages > 0 && firstSitePage + offset >= sitePages)
+                        break;
+                }
+
+                this.modThumbs = collected;
+                this.totalCount = total;
+                this.pageCount = sitePages > 0 ? (int)Math.Ceiling(sitePages / (double)batch) : 0;
+                RebuildSharedTextures();
+            });
         }
+
+        private string BuildUrl(int sitePage) => WebClient.BuildSearchURL(
+            selectedSortBy,
+            selectedSortOrder,
+            basicText: searchQuery,
+            nsfw: selectedNSFW,
+            name: modName,
+            author: modAuthor,
+            gender: selectedGender,
+            race: modRaces,
+            tags: modTags,
+            affects: modAffects,
+            comments: modComments,
+            dtCompatibility: selectedDTCompat,
+            types: selectedType,
+            page: sitePage);
 
         /// <summary>Largeur réservée aux libellés, pour que les champs s'alignent entre eux.</summary>
         private const float LabelWidth = 80f;
@@ -415,27 +433,33 @@ namespace ModArchiveBrowser.Windows
 
             ImGui.Spacing();
             ImGui.Separator();
-            //Un bouton "Load more" plutot que des fleches. XMA sert quinze mods par page :
-            //avec des fleches, parcourir un catalogue de 60 000 mods demandait un aller-retour
-            //par tranche de quinze, en perdant a chaque fois ce qu'on venait de voir. Les pages
-            //s'accumulent desormais, comme sur n'importe quel catalogue en ligne.
+            //Pagination par blocs : une page d'affichage vaut plusieurs pages du site.
             ImGui.Spacing();
+            ImGui.Separator();
 
-            var atEnd = pageCount > 0 && page >= pageCount;
             var loading = searchTask is { IsCompleted: false };
-            var label = atEnd ? "Everything is loaded" : loading ? "Loading..." : "Load more";
+            var lastPage = pageCount > 0 ? pageCount : page;
+            var pageLabel = loading ? "Loading..." : $"page {page} of {lastPage:N0}";
 
-            var buttonWidth = MathF.Max(160f, ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 4f);
-            ImGui.SetCursorPosX((ImGui.GetWindowWidth() - buttonWidth) * 0.5f);
+            var arrow = ImGui.GetFrameHeight();
+            var totalWidth = arrow * 2f + ImGui.CalcTextSize(pageLabel).X + ImGui.GetStyle().ItemSpacing.X * 4f;
+            ImGui.SetCursorPosX((ImGui.GetWindowWidth() - totalWidth) * 0.5f);
 
-            using (ImRaii.Disabled(atEnd || loading))
+            using (ImRaii.Disabled(loading || page <= 1))
             {
-                if (ImGui.Button(label, new Vector2(buttonWidth, 0)))
-                    RunSearch(page + 1, append: true);
+                if (ImGui.ArrowButton("SearchGoBack", ImGuiDir.Left))
+                    RunSearch(page - 1);
             }
 
-            if (!atEnd && ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Loads 15 more mods (page {page + 1} of {pageCount}).");
+            ImGui.SameLine();
+            ImGui.TextDisabled(pageLabel);
+            ImGui.SameLine();
+
+            using (ImRaii.Disabled(loading || (pageCount > 0 && page >= pageCount)))
+            {
+                if (ImGui.ArrowButton("SearchGoForward", ImGuiDir.Right))
+                    RunSearch(page + 1);
+            }
 
             ImGui.Spacing();
         }

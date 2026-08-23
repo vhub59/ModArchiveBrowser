@@ -40,6 +40,27 @@ namespace ModArchiveBrowser.Utils
             return (availableWidth - spacing * (columns - 1)) / columns;
         }
 
+        /// <summary>Hauteur d'une carte pour une largeur donnée. Toutes ont la même.</summary>
+        public static float CardHeight(float width)
+        {
+            var imageHeight = MathF.Round(width * ImageRatio);
+            return imageHeight + ImGui.GetTextLineHeightWithSpacing() * 3f + ImGui.GetStyle().FramePadding.Y * 2f;
+        }
+
+        /// <summary>
+        /// Nombre de cartes tenant dans la zone donnée, pour savoir combien de mods aller
+        /// chercher. XMA n'en sert que quinze par requête : remplir un écran large en demande
+        /// plusieurs.
+        /// </summary>
+        public static int Capacity(Vector2 available)
+        {
+            var columns = ColumnCount(available.X);
+            var cardHeight = CardHeight(CardWidth(available.X, columns));
+            var rows = Math.Max(1, (int)(available.Y / (cardHeight + ImGui.GetStyle().ItemSpacing.Y)));
+
+            return columns * rows;
+        }
+
         /// <summary>
         /// Dessine une carte et renvoie vrai si elle a été cliquée.
         ///
