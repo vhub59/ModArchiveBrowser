@@ -189,25 +189,50 @@ namespace ModArchiveBrowser.Utils
                                          Vector2 top, Vector2 end, Vector2 uv0, Vector2 uv1,
                                          float width, float imageHeight)
         {
-            var spread = MathF.Max(6f, width * 0.03f);
-            var offsets = new[]
+            //Pixellisation plutot qu'etalement. La premiere version superposait neuf copies
+            //decalees de quelques pixels : bien trop peu pour cacher quoi que ce soit, le sujet
+            //restait parfaitement reconnaissable.
+            //
+            //Ici, l'image est decoupee en cases et chaque case est dessinee en n'echantillonnant
+            //qu'un point de la texture : elle se remplit donc d'une couleur unique. C'est une
+            //vraie mosaique, la seule facon d'obtenir cet effet dans ImGui, qui n'expose ni
+            //shader ni cible de rendu intermediaire.
+            const int columns = 12;
+            var rows = Math.Max(4, (int)(columns * imageHeight / width));
+
+            var cell = new Vector2(width / columns, imageHeight / rows);
+            var uvSpan = uv1 - uv0;
+
+            draw.PushClipRect(top, end, true);
+
+            for (var y = 0; y < rows; y++)
             {
-                new Vector2(-spread, -spread), new Vector2(0f, -spread), new Vector2(spread, -spread),
-                new Vector2(-spread, 0f),      Vector2.Zero,            new Vector2(spread, 0f),
-                new Vector2(-spread, spread),  new Vector2(0f, spread), new Vector2(spread, spread),
-            };
+                for (var x = 0; x < columns; x++)
+                {
+                    var cellTop = top + new Vector2(x * cell.X, y * cell.Y);
 
-            //Chaque copie ne porte qu'une fraction de l'opacite : leur somme reconstitue une image
-            //complete, mais etalee.
-            const uint sample = 0x30FFFFFFu;
-            foreach (var offset in offsets)
-                draw.AddImageRounded(texture.Handle, top + offset, end + offset, uv0, uv1, sample, Rounding, ImDrawFlags.RoundCornersTop);
+                    //Centre de la case, ramene dans les coordonnees de texture.
+                    var center = uv0 + new Vector2(
+                        (x + 0.5f) / columns * uvSpan.X,
+                        (y + 0.5f) / rows * uvSpan.Y);
 
-            draw.AddRectFilled(top, end, 0x99000000u, Rounding, ImDrawFlags.RoundCornersTop);
+                    //Une fenetre minuscule autour de ce point : la case entiere prend sa couleur.
+                    var point = new Vector2(0.0015f, 0.0015f);
+                    draw.AddImage(texture.Handle, cellTop, cellTop + cell + Vector2.One, center - point, center + point);
+                }
+            }
+
+            draw.PopClipRect();
+
+            //Un voile sombre acheve de casser les contrastes, et porte le libelle.
+            draw.AddRectFilled(top, end, 0x66000000u, Rounding, ImDrawFlags.RoundCornersTop);
 
             const string label = "Adult content";
             var size = ImGui.CalcTextSize(label);
-            draw.AddText(top + new Vector2((width - size.X) / 2f, (imageHeight - size.Y) / 2f), 0xCCFFFFFFu, label);
+            var position = top + new Vector2((width - size.X) / 2f, (imageHeight - size.Y) / 2f);
+
+            draw.AddRectFilled(position - new Vector2(8f, 4f), position + size + new Vector2(8f, 4f), 0xAA000000u, 4f);
+            draw.AddText(position, 0xEEFFFFFFu, label);
         }
 
         /// <summary>
