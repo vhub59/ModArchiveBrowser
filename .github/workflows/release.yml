@@ -1,85 +1,103 @@
-name: Create Release
+name: Release
 
+# Se declenche sur un tag de version, et sur lui seul.
+#
+# L'ancien workflow utilisait "tags-ignore: testing_*", ce qui le faisait partir sur n'importe quel
+# autre tag : un simple tag de travail suffisait a publier une release. On nomme explicitement ce
+# qui declenche plutot que ce qui ne declenche pas.
 on:
   push:
-      tags-ignore:
-      - testing_*
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v1
-        with:
-          dotnet-version: '8.x.x'
-      - name: Restore dependencies
-        run: dotnet restore
-      - name: Download Dalamud
-        run: |
-          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
-          Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
-      - name: Build
-        run: |
-          $ver = '${{ github.ref_name }}'
-          invoke-expression 'dotnet build --no-restore --configuration Release --nologo -p:Version=$ver -p:FileVersion=$ver -p:AssemblyVersion=$ver'
-      - name: write version into jsons
-        run: |
-          $ver = '${{ github.ref_name }}'
-          $path = './ModArchiveBrowser/bin/Release/ModArchiveBrowser.json'
-          $json = Get-Content -Raw $path | ConvertFrom-Json
-          $json.AssemblyVersion = $ver
-          $content = $json | ConvertTo-Json
-          set-content -Path $path -Value $content
-      - name: Archive
-        run: Compress-Archive -Path ./ModArchiveBrowser/bin/Release/* -DestinationPath ModArchiveBrowser.zip
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          path: |
-            ./ModArchiveBrowser/bin/Release/*
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: ModArchiveBrowser ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: ./ModArchiveBrowser.zip
-          asset_name: ModArchiveBrowser.zip
-          asset_content_type: application/zip
 
-      - name: Write out repo.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      # Le tag porte un "v" que MSBuild refuse dans un numero de version.
+      - name: Read version from tag
+        id: version
+        shell: pwsh
         run: |
-          $ver = '${{ github.ref_name }}'
-          $path = './repo.json'
-          $json = Get-Content -Raw $path | ConvertFrom-Json
-          $json[0].AssemblyVersion = $ver
-          $json[0].DownloadLinkInstall = $json.DownloadLinkInstall -replace '[^/]+/ModArchiveBrowser.zip',"$ver/ModArchiveBrowser.zip"
-          $json[0].DownloadLinkUpdate = $json.DownloadLinkUpdate -replace '[^/]+/ModArchiveBrowser.zip',"$ver/ModArchiveBrowser.zip"
-          $content = $json | ConvertTo-Json -AsArray
-          set-content -Path $path -Value $content
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Building version $version"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      # Dalamud.NET.Sdk a besoin des bibliotheques de Dalamud pour compiler. DALAMUD_HOME lui dit ou
+      # les trouver, ce qui evite de dependre d'un chemin dans le profil utilisateur du runner.
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Force dalamud.zip "$env:GITHUB_WORKSPACE\dalamud"
+          "DALAMUD_HOME=$env:GITHUB_WORKSPACE\dalamud" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet build ModArchiveBrowser/ModArchiveBrowser.csproj `
+            --configuration Release --nologo `
+            -p:Version=${{ steps.version.outputs.value }} `
+            -p:AssemblyVersion=${{ steps.version.outputs.value }} `
+            -p:FileVersion=${{ steps.version.outputs.value }}
+
+      # Dalamud.NET.Sdk produit deja une archive prete a installer. L'ancien workflow zippait
+      # bin/Release/* et obtenait une arborescence differente de celle qu'attend Dalamud.
+      - name: Collect package
+        shell: pwsh
+        run: |
+          $package = 'ModArchiveBrowser/bin/Release/ModArchiveBrowser/latest.zip'
+          if (-not (Test-Path $package)) { throw "Package not found at $package" }
+          Copy-Item $package ModArchiveBrowser.zip
+
+      - name: Create release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create '${{ github.ref_name }}' ModArchiveBrowser.zip `
+            --title 'ModArchiveBrowser ${{ github.ref_name }}' `
+            --generate-notes
+
+      # repo.json est le fichier que les utilisateurs collent dans Dalamud : il doit pointer vers la
+      # release qui vient d'etre publiee, sans quoi ils installeraient la precedente.
+      - name: Point repo.json at the new release
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+          $tag = '${{ github.ref_name }}'
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/ModArchiveBrowser.zip"
+
+          $json = Get-Content -Raw repo.json | ConvertFrom-Json
+          $json[0].AssemblyVersion = $version
+          $json[0].DownloadLinkInstall = $url
+          $json[0].DownloadLinkUpdate = $url
+          $json[0].DownloadLinkTesting = $url
+
+          $json | ConvertTo-Json -AsArray -Depth 10 | Set-Content -Path repo.json
 
       - name: Commit repo.json
+        shell: pwsh
         run: |
-          git config --global user.name "Actions User"
-          git config --global user.email "actions@github.com"
-          git fetch origin master
-          git branch -f master ${{ github.sha }}
-          git checkout master
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add repo.json
-          git commit -m "[CI] Updating repo.json for ${{ github.ref_name }}" || true
-          git push origin master
+          # Rien a commiter si la release est rejouee sur le meme tag.
+          git diff --staged --quiet; if ($LASTEXITCODE -ne 0) {
+            git commit -m "Point repo.json at ${{ github.ref_name }}"
+            git push origin HEAD:master
+          }

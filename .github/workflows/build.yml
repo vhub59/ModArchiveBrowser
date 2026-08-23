@@ -1,0 +1,63 @@
+name: Build
+
+# Compile a chaque push et sur chaque pull request.
+#
+# Le depot n'avait aucune verification de ce genre : rien ne compilait avant une release, et une
+# regression ne se serait vue qu'au moment de publier. Le plugin depend en outre de deux choses qui
+# bougent sans preavis — les bibliotheques de Dalamud et le paquet Penumbra.Api — donc une
+# compilation qui passait hier peut echouer aujourd'hui sans qu'une ligne ait change ici.
+on:
+  push:
+    branches:
+      - master
+      - 'migration-*'
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Force dalamud.zip "$env:GITHUB_WORKSPACE\dalamud"
+          "DALAMUD_HOME=$env:GITHUB_WORKSPACE\dalamud" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build
+        run: dotnet build ModArchiveBrowser/ModArchiveBrowser.csproj --configuration Release --nologo
+
+      # Verifie que le paquet est bien produit et qu'il contient ce que Dalamud attend : le manifeste
+      # sert a lister le plugin, son absence ne se verrait qu'a l'installation.
+      - name: Check the package
+        shell: pwsh
+        run: |
+          $package = 'ModArchiveBrowser/bin/Release/ModArchiveBrowser/latest.zip'
+          if (-not (Test-Path $package)) { throw "Package not found at $package" }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $package))
+          $names = $zip.Entries | ForEach-Object { $_.Name }
+          $zip.Dispose()
+
+          foreach ($required in 'ModArchiveBrowser.dll', 'ModArchiveBrowser.json') {
+            if ($names -notcontains $required) { throw "$required missing from the package" }
+          }
+
+          Write-Host "Package contains: $($names -join ', ')"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ModArchiveBrowser
+          path: ModArchiveBrowser/bin/Release/ModArchiveBrowser/latest.zip
