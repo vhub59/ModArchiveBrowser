@@ -361,7 +361,9 @@ namespace ModArchiveBrowser.Windows
                 if (images.TryGetValue(thumb.url_thumb, out var shared))
                     texture = shared.GetWrapOrDefault();
 
-                if (ModGrid.Draw($"##searchcard{i}", thumb, texture, cardWidth))
+                var availability = AvailabilityIndex.Get(plugin.Configuration, thumb.url);
+
+                if (ModGrid.Draw($"##searchcard{i}", thumb, texture, cardWidth, availability))
                 {
                     try
                     {

@@ -121,7 +121,9 @@ public class MainWindow : Window, IDisposable
             if (images.TryGetValue(thumb.url_thumb, out var shared))
                 texture = shared.GetWrapOrDefault();
 
-            if (ModGrid.Draw($"##homecard{i}", thumb, texture, cardWidth))
+            var availability = AvailabilityIndex.Get(plugin.Configuration, thumb.url);
+
+            if (ModGrid.Draw($"##homecard{i}", thumb, texture, cardWidth, availability))
             {
                 try
                 {

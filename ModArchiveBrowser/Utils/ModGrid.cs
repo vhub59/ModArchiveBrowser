@@ -46,7 +46,8 @@ namespace ModArchiveBrowser.Utils
         /// La carte entière est cliquable, pas seulement la vignette : un bouton invisible occupe
         /// toute sa surface et le contenu est peint par-dessus.
         /// </summary>
-        public static bool Draw(string id, ModThumb thumb, IDalamudTextureWrap? texture, float width)
+        public static bool Draw(string id, ModThumb thumb, IDalamudTextureWrap? texture, float width,
+                                ModAvailability availability = ModAvailability.Unknown)
         {
             var style = ImGui.GetStyle();
             var pad = style.FramePadding;
@@ -66,6 +67,10 @@ namespace ModArchiveBrowser.Utils
             draw.AddRect(origin, end, ImGui.GetColorU32(hovered ? ImGuiCol.ButtonHovered : ImGuiCol.Border), 6f);
 
             DrawThumbnail(draw, texture, origin, width, imageHeight);
+            DrawAvailabilityBadge(draw, availability, origin);
+
+            if (hovered && availability != ModAvailability.Unknown)
+                ImGui.SetTooltip(AvailabilityIndex.Describe(availability));
 
             //Tout le contenu est peint par la liste de dessin, jamais par des widgets.
             //Un widget dessine apres le bouton invisible deviendrait le "dernier element" d'ImGui,
@@ -94,6 +99,35 @@ namespace ModArchiveBrowser.Utils
                 draw.AddText(new Vector2(origin.X + width - pad.X - viewsWidth, metaY), mutedColor, views);
 
             return clicked;
+        }
+
+        /// <summary>
+        /// Pastille d'installabilité, en haut à gauche de la vignette.
+        ///
+        /// Rien n'est dessiné tant que le mod n'a pas été consulté : l'index se construisant a
+        /// l'usage, marquer les mods inconnus d'un point d'interrogation couvrirait la grille de
+        /// signes sans information. L'absence de pastille se lit alors "pas encore su", ce qui
+        /// est la verite.
+        /// </summary>
+        private static void DrawAvailabilityBadge(ImDrawListPtr draw, ModAvailability availability, Vector2 origin)
+        {
+            if (availability == ModAvailability.Unknown)
+                return;
+
+            var color = availability switch
+            {
+                ModAvailability.Installable => 0xFF4CAF50u, // vert
+                ModAvailability.Archive => 0xFF3BA5EBu,     // ambre
+                ModAvailability.External => 0xFF6B6B6Bu,    // gris
+                _ => 0xFF4C4CE0u,                            // rouge
+            };
+
+            var position = origin + new Vector2(6f, 6f);
+            var size = new Vector2(10f, 10f);
+
+            //Un liseré sombre détache la pastille des vignettes claires.
+            draw.AddRectFilled(position - Vector2.One, position + size + Vector2.One, 0xC0000000u, 3f);
+            draw.AddRectFilled(position, position + size, color, 2f);
         }
 
         private static void DrawThumbnail(ImDrawListPtr draw, IDalamudTextureWrap? texture, Vector2 origin, float width, float imageHeight)

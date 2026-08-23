@@ -48,12 +48,31 @@ namespace ModArchiveBrowser.Windows
         {
             (this.mod,this.descriptionNodes) = WebClient.GetModPage(modThumb);
             RefreshInstalledState();
+            RecordAvailability();
         }
 
         public void ChangeMod(string modId)
         {
             (this.mod, this.descriptionNodes) = WebClient.GetModPage(modId);
             RefreshInstalledState();
+            RecordAvailability();
+        }
+
+        /// <summary>
+        /// Retient si ce mod est installable, pour que la grille puisse l'afficher plus tard.
+        ///
+        /// L'information n'existe que sur la page d'un mod : c'est le seul moment ou on peut
+        /// l'apprendre sans requete supplementaire, alors on la note au passage.
+        /// </summary>
+        private void RecordAvailability()
+        {
+            if (!mod.HasValue)
+                return;
+
+            AvailabilityIndex.Record(
+                plugin.Configuration,
+                mod.Value.modThumb.url,
+                mod.Value.url_download_button);
         }
 
         /// <summary>Vrai si le fichier est heberge par XMA, donc telechargeable directement.</summary>

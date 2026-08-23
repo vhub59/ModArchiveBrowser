@@ -30,6 +30,15 @@ public class Configuration : IPluginConfiguration
     /// </summary>
     public bool AllowNsfw { get; set; } = false;
 
+    /// <summary>
+    /// Index d'installabilité, construit à l'usage : identifiant du mod vers ModAvailability.
+    ///
+    /// L'information ne figure que sur la page d'un mod. La connaître pour tout le catalogue
+    /// supposerait de parcourir les 52 000 pages de XMA ; on retient donc simplement ce que
+    /// l'on apprend en consultant les fiches, et la grille s'en sert ensuite gratuitement.
+    /// </summary>
+    public Dictionary<string, int> KnownAvailability { get; set; } = new Dictionary<string, int>();
+
     // the below exist just to make saving less cumbersome
     public void Save()
     {
