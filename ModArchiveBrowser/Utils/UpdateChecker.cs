@@ -96,7 +96,11 @@ namespace ModArchiveBrowser.Utils
             {
                 token.ThrowIfCancellationRequested();
 
-                var published = WebClient.GetModVersion(mod.XmaModId!);
+                //L'historique JSON est prefere : 1,2 Ko contre 37 pour la page complete, et sa
+                //premiere entree porte la version courante. Il est vide pour un mod jamais mis a
+                //jour depuis sa publication ; on retombe alors sur la page.
+                var history = WebClient.GetVersionHistory(mod.XmaModId!);
+                var published = history.Count > 0 ? history[0].To : WebClient.GetModVersion(mod.XmaModId!);
                 Checked++;
 
                 if (!string.IsNullOrEmpty(published) && !SameVersion(mod.Version, published))

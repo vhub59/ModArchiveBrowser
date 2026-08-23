@@ -33,6 +33,8 @@ namespace ModArchiveBrowser.Windows
         //Ce que Penumbra possede deja face a ce mod, et dans quelle version.
         private InstallState _installState = InstallState.Absent;
         private InstalledMod? _installedMatch = null;
+        //Historique des versions, charge en fond a l'ouverture de la fiche.
+        private List<WebClient.VersionEntry> _history = new();
         public ModWindow(Plugin plugin): base("Mod view window##")
         {
             this.plugin = plugin;
@@ -53,6 +55,7 @@ namespace ModArchiveBrowser.Windows
             (this.mod,this.descriptionNodes) = WebClient.GetModPage(modThumb);
             RefreshInstalledState();
             RecordAvailability();
+            LoadHistory();
         }
 
         public void ChangeMod(string modId)
@@ -60,6 +63,24 @@ namespace ModArchiveBrowser.Windows
             (this.mod, this.descriptionNodes) = WebClient.GetModPage(modId);
             RefreshInstalledState();
             RecordAvailability();
+            LoadHistory();
+        }
+
+        /// <summary>
+        /// Charge l'historique des versions en arriere-plan.
+        ///
+        /// C'est une requete de plus, mais elle ne bloque pas l'affichage de la fiche : elle
+        /// arrive quelques centaines de millisecondes apres, et la section apparait alors.
+        /// </summary>
+        private void LoadHistory()
+        {
+            _history = new List<WebClient.VersionEntry>();
+
+            var modId = AvailabilityIndex.ModIdFromUrl(mod?.modThumb.url);
+            if (modId == null)
+                return;
+
+            Task.Run(() => _history = WebClient.GetVersionHistory(modId));
         }
 
         /// <summary>
@@ -148,6 +169,54 @@ namespace ModArchiveBrowser.Windows
                             StartInstall();
                     }
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Historique des versions publiees, avec leurs notes.
+        ///
+        /// XMA le sert par son endpoint /api/mod/update_history, celui-la meme que sa page
+        /// interroge pour son onglet History. C'est la reponse a "qu'est-ce qui a change depuis
+        /// ma version" : sans elle, une mise a jour se decide a l'aveugle.
+        ///
+        /// Les entrees posterieures a la version installee sont mises en avant : ce sont les
+        /// seules qui concernent l'utilisateur.
+        /// </summary>
+        private void DrawVersionHistory()
+        {
+            //Une copie locale : la liste est remplacee par la tache de chargement pendant que la
+            //boucle de rendu la parcourt.
+            var history = _history;
+            if (history.Count == 0)
+                return;
+
+            ImGui.Spacing();
+            if (!ImGui.CollapsingHeader($"Version history ({history.Count})"))
+                return;
+
+            var installed = _installedMatch?.Version;
+
+            foreach (var entry in history)
+            {
+                //Une entree est "nouvelle" si elle mene a une version que l'utilisateur n'a pas.
+                var isNew = !string.IsNullOrEmpty(installed)
+                            && !UpdateChecker.SameVersion(entry.To, installed);
+
+                if (isNew)
+                    ImGui.TextColored(Theme.Positive, $"{entry.From} → {entry.To}");
+                else
+                    ImGui.TextDisabled($"{entry.From} → {entry.To}");
+
+                if (entry.Date > DateTimeOffset.MinValue)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextDisabled($"·  {entry.Date.LocalDateTime:d MMM yyyy}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.Notes))
+                    ImGui.TextWrapped(entry.Notes.Trim());
+
+                ImGui.Spacing();
             }
         }
 
@@ -564,6 +633,8 @@ namespace ModArchiveBrowser.Windows
                 ImGui.TextWrapped(WebUtility.HtmlDecode(mod.Value.modThumb.genders));
                 ImGui.Spacing();
                 ImGui.TextWrapped($"Tags: {tagList}");
+
+                DrawVersionHistory();
 
                 ImGui.EndChild();
             }

@@ -72,21 +72,29 @@ namespace ModArchiveBrowser.Utils
         /// N'ecrit la configuration que si la valeur change : ChangeMod est appele a chaque
         /// ouverture de fiche, y compris pour un mod deja connu.
         /// </summary>
-        public static void Record(Configuration config, string? relativeUrl, string? downloadUrl)
+        /// <param name="save">
+        /// Faux pendant un prechargement : trente cartes signifieraient trente ecritures de la
+        /// configuration sur disque. L'appelant sauvegarde une fois, a la fin.
+        /// </param>
+        public static bool Record(Configuration config, string? relativeUrl, string? downloadUrl, bool save = true)
         {
             var id = ModIdFromUrl(relativeUrl);
             if (id == null)
-                return;
+                return false;
 
             var availability = Classify(downloadUrl);
             if (availability == ModAvailability.Unknown)
-                return;
+                return false;
 
             if (config.KnownAvailability.TryGetValue(id, out var existing) && existing == (int)availability)
-                return;
+                return false;
 
             config.KnownAvailability[id] = (int)availability;
-            config.Save();
+
+            if (save)
+                config.Save();
+
+            return true;
         }
 
         private static ModAvailability Classify(string? downloadUrl)

@@ -63,7 +63,7 @@ namespace ModArchiveBrowser.Utils
         /// Ligne de contexte : nom de la vue, puis nombre d'éléments et page en gris.
         /// C'est la reponse a "on ne sait meme pas ou on est".
         /// </summary>
-        public static void Context(string title, int total, int shown = 0)
+        public static void Context(string title, int total, int shown = 0, int checking = 0)
         {
             ImGui.TextUnformatted(title);
             ImGui.SameLine();
@@ -80,6 +80,11 @@ namespace ModArchiveBrowser.Utils
             //que le filtre avait tout balaye.
             if (shown > 0 && shown < total)
                 detail += $"  ·  showing {shown:N0}";
+
+            //Le prechargement des pastilles est signale : sans cela, on les voit apparaitre une
+            //a une sans comprendre pourquoi.
+            if (checking > 0)
+                detail += $"  ·  checking {checking}";
 
             ImGui.TextDisabled($"·  {detail}");
         }

@@ -57,6 +57,7 @@ public class MainWindow : Window, IDisposable
         modThumbs = WebClient.GetHomePageMods();
         modThumbs = modThumbs.Distinct().ToList();
         RebuildSharedTextures();
+        plugin.prefetcher.Prefetch(modThumbs);
     }
 
     private async void RebuildSharedTextures()
@@ -81,7 +82,7 @@ public class MainWindow : Window, IDisposable
 
     private void DrawHomePageTable()
     {
-        NavBar.Context(NavBar.TitleOf(NavTarget.Home), modThumbs?.Count ?? 0);
+        NavBar.Context(NavBar.TitleOf(NavTarget.Home), modThumbs?.Count ?? 0, 0, plugin.prefetcher.Pending);
 
         //Le rafraichissement ne concerne que l'accueil : les autres vues se rechargent par leur
         //propre bouton de recherche.

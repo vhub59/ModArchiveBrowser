@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net.Http;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -108,6 +109,88 @@ namespace ModArchiveBrowser
             }
 
             return nodes[0].GetAttributeValue(attribute, fallback);
+        }
+
+        /// <summary>
+        /// Lien de telechargement d'un mod, sans analyser le reste de la fiche.
+        ///
+        /// Sert a savoir si un mod est installable avant de l'ouvrir. XMA n'expose cette
+        /// information nulle part ailleurs : ses endpoints JSON couvrent l'historique, le suivi et
+        /// les signalements, jamais le telechargement. Il faut donc charger la page, mais on
+        /// s'arrete a ce seul lien — et le cache HTML fait que l'ouverture ulterieure de la fiche
+        /// ne coutera rien.
+        /// </summary>
+        public static string GetDownloadUrl(string modId)
+        {
+            try
+            {
+                var page = ClientInstance.Load($"{xivmodarchiveRoot}/modid/{modId}");
+                var node = page.DocumentNode.SelectSingleNode("//a[@id='mod-download-link']");
+                return node?.GetAttributeValue("href", string.Empty) ?? string.Empty;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.Debug($"Could not read the download link of mod {modId}: {e.Message}");
+                return string.Empty;
+            }
+        }
+
+        /// <summary>Une entree de l'historique des versions d'un mod.</summary>
+        public readonly record struct VersionEntry(string From, string To, DateTimeOffset Date, string Notes);
+
+        private static readonly HttpClient JsonClient = CreateJsonClient();
+
+        private static HttpClient CreateJsonClient()
+        {
+            var client = new HttpClient(XmaSession.CreateHandler());
+            client.DefaultRequestHeaders.Add("User-Agent", XmaSession.UserAgent);
+            client.Timeout = TimeSpan.FromSeconds(20);
+            return client;
+        }
+
+        /// <summary>
+        /// Historique des versions d'un mod, de la plus recente a la plus ancienne.
+        ///
+        /// XMA expose pour cela un endpoint JSON, /api/mod/update_history, que sa propre page
+        /// interroge pour remplir son onglet History. Il renvoie 1,2 Ko la ou la page complete en
+        /// pese 37 : c'est une source plus legere, plus stable qu'un selecteur HTML, et elle
+        /// apporte en prime les notes de version que la page n'affiche qu'en differe.
+        /// </summary>
+        public static List<VersionEntry> GetVersionHistory(string modId)
+        {
+            var entries = new List<VersionEntry>();
+
+            try
+            {
+                var json = JsonClient.GetStringAsync($"{xivmodarchiveRoot}/api/mod/update_history?modid={modId}").Result;
+                using var document = System.Text.Json.JsonDocument.Parse(json);
+
+                if (!document.RootElement.TryGetProperty("version_history", out var history))
+                    return entries;
+
+                foreach (var element in history.EnumerateArray())
+                {
+                    var date = DateTimeOffset.MinValue;
+                    if (element.TryGetProperty("timestamp", out var stamp)
+                        && long.TryParse(stamp.GetString(), out var milliseconds))
+                        date = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
+
+                    entries.Add(new VersionEntry(
+                        Text(element, "version_previous"),
+                        Text(element, "version_new"),
+                        date,
+                        Text(element, "patch_notes")));
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.Debug($"Could not read the history of mod {modId}: {e.Message}");
+            }
+
+            return entries;
+
+            static string Text(System.Text.Json.JsonElement element, string property)
+                => element.TryGetProperty(property, out var value) ? value.GetString() ?? string.Empty : string.Empty;
         }
 
         /// <summary>

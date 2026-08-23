@@ -107,7 +107,7 @@ namespace ModArchiveBrowser.Windows
         /// </summary>
         public void DrawEmbedded(string title)
         {
-            NavBar.Context(title, totalCount > 0 ? totalCount : modThumbs?.Count ?? 0, modThumbs?.Count ?? 0);
+            NavBar.Context(title, totalCount > 0 ? totalCount : modThumbs?.Count ?? 0, modThumbs?.Count ?? 0, plugin.prefetcher.Pending);
             ImGui.Separator();
 
             DrawSearchHeader();
@@ -243,6 +243,8 @@ namespace ModArchiveBrowser.Windows
                 this.totalCount = total;
                 this.pageCount = sitePages > 0 ? (int)Math.Ceiling(sitePages / (double)batch) : 0;
                 RebuildSharedTextures();
+                //Les pastilles doivent etre la avant qu'on ne clique, pas apres.
+                plugin.prefetcher.Prefetch(collected);
             });
         }
 
