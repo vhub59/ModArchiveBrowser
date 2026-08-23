@@ -52,6 +52,47 @@ namespace ModArchiveBrowser
             }
         }
 
+        private static HtmlWeb searchInstance = null;
+
+        /// <summary>
+        /// Client dédié aux recherches, sans cache disque.
+        ///
+        /// HtmlAgilityPack derive le nom de son fichier de cache de l'hote et du chemin, en
+        /// ignorant la chaine de requete : toutes les recherches partagent donc une seule entree,
+        /// "www.xivmodarchive.comsearch". Une recherche par auteur pouvait ainsi se voir servir le
+        /// resultat d'une recherche par tag faite juste avant, et les filtres paraissaient sans
+        /// effet alors qu'ils etaient corrects dans l'URL.
+        ///
+        /// Les pages de mods gardent leur cache : elles ont un chemin distinct chacune
+        /// (/modid/41123), et c'est lui qui rend gratuite la seconde visite d'un mod deja sonde
+        /// par le prechargement.
+        ///
+        /// Rien n'est perdu au passage : les resultats sont deja retenus en memoire, par URL
+        /// complete cette fois, chaine de requete comprise.
+        /// </summary>
+        public static HtmlWeb SearchInstance
+        {
+            get
+            {
+                if (searchInstance != null)
+                    return searchInstance;
+
+                searchInstance = new HtmlWeb
+                {
+                    UsingCache = false,
+                    UserAgent = XmaSession.UserAgent,
+                };
+
+                searchInstance.PreRequest = request =>
+                {
+                    request.CookieContainer = XmaSession.CookieJar;
+                    return true;
+                };
+
+                return searchInstance;
+            }
+        }
+
         /// <summary>
         /// Vide le cache HTML sur disque.
         ///
@@ -247,7 +288,8 @@ namespace ModArchiveBrowser
 
         public static List<ModThumb> GetHomePageMods()
         {
-            HtmlDocument homepage = ClientInstance.Load(xivmodarchiveRoot);
+            //La vitrine change en continu : la mettre en cache n'aurait pas de sens.
+            HtmlDocument homepage = SearchInstance.Load(xivmodarchiveRoot);
             Plugin.Logger.Debug("Request made");
             return ParseHomePage(homepage);
         }
@@ -291,7 +333,9 @@ namespace ModArchiveBrowser
         public static SearchResults DoSearch(string searchUrl)
         {
             string url = xivmodarchiveRoot + '/' + searchUrl;
-            HtmlDocument page = ClientInstance.Load(url);
+            //SearchInstance et non ClientInstance : toutes les recherches partageraient sinon une
+            //seule entree de cache, leur chaine de requete etant ignoree.
+            HtmlDocument page = SearchInstance.Load(url);
             Plugin.Logger.Debug("Request made");
 
             return new SearchResults(
