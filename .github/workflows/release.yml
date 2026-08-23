@@ -24,13 +24,20 @@ jobs:
           fetch-depth: 0
 
       # Le tag porte un "v" que MSBuild refuse dans un numero de version.
+      #
+      # Dalamud compare la version annoncee par repo.json a celle du manifeste embarque, et exige
+      # une egalite stricte, chaine a chaine. Or le SDK normalise en quatre segments : un tag
+      # v0.8.0 produit un manifeste en 0.8.0.0, et l'installation echoue sur
+      # "Distributed plugin version does not match repo version". On calcule donc les deux formes.
       - name: Read version from tag
         id: version
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}' -replace '^v', ''
+          $full = ([version]$version).ToString(4)
           "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Building version $version"
+          "full=$full"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Building $version, published as $full"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -83,7 +90,7 @@ jobs:
           $url = "https://github.com/${{ github.repository }}/releases/download/$tag/ModArchiveBrowser.zip"
 
           $json = Get-Content -Raw repo.json | ConvertFrom-Json
-          $json[0].AssemblyVersion = $version
+          $json[0].AssemblyVersion = '${{ steps.version.outputs.full }}'
           $json[0].DownloadLinkInstall = $url
           $json[0].DownloadLinkUpdate = $url
           $json[0].DownloadLinkTesting = $url

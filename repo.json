@@ -3,7 +3,7 @@
     "Author": "Noevain, vhub59",
     "Name": "XIV Mod Archive Browser",
     "InternalName": "ModArchiveBrowser",
-    "AssemblyVersion": "0.8.0",
+    "AssemblyVersion": "0.8.0.0",
     "Description": "Browse xivmodarchive.com from inside the game and install mods into Penumbra in one click. Fork of Noevain/ModArchiveBrowser, updated for Dalamud API 15.",
     "Punchline": "Browse and install mods from the comfort of your FFXIV house",
     "ApplicableVersion": "any",
