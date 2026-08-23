@@ -90,46 +90,82 @@ namespace ModArchiveBrowser.Utils
         }
 
         /// <summary>
-        /// Bascule du contenu adulte, alignee a droite de la barre.
+        /// Contenu adulte : cycle a trois etats, aligne a droite de la barre.
         ///
-        /// Le reglage existait deja mais dormait dans la fenetre de configuration, alors qu'on le
-        /// bascule souvent. Il ne se contente pas de masquer : decoche, la session anonyme est
-        /// fermee et le cache HTML purge, si bien que XMA repond 403 sur ces pages. Le filtrage
-        /// tient cote serveur, pas cote affichage.
+        /// Deux etats ne suffisaient pas. L'idee retenue est que les mods adultes restent
+        /// melanges aux autres, simplement masques — un interrupteur qui les fait disparaitre
+        /// dit autre chose. Le troisieme etat garde malgre tout la possibilite de les exclure
+        /// entierement, pour qui la veut.
         ///
-        /// Activer melange les mods adultes aux autres plutot que de les isoler : omettre le
-        /// parametre nsfw fait renvoyer a XMA les deux ensembles reunis. Verifie sur le tag bibo+,
-        /// 3 391 sans adultes et 1 282 adultes seuls, pour 4 673 sans le parametre.
+        ///   Hidden   XMA les laisse de cote et repond 403 sur leurs pages
+        ///   Blurred  melanges aux autres, vignettes pixellisees jusqu'au survol
+        ///   Shown    melanges aux autres, sans masquage
+        ///
+        /// Un clic passe au suivant. Hidden reste le point de depart d'une installation neuve :
+        /// ce n'est pas au plugin de decider ce qu'un nouvel utilisateur veut voir.
         /// </summary>
         private static void DrawAdultToggle(Plugin plugin, NavTarget current)
         {
-            var enabled = plugin.Configuration.AllowNsfw;
+            var config = plugin.Configuration;
 
             //La page d'accueil est la vitrine de XMA, servie telle quelle : elle n'accepte aucun
-            //parametre de recherche, donc aucun filtre. Griser la bascule vaut mieux que la
-            //laisser sans effet, ce qui donnerait l'impression qu'elle est cassee.
+            //parametre de recherche, donc aucun filtre.
             var applicable = current != NavTarget.Home;
-            var icon = enabled ? FontAwesomeIcon.Eye : FontAwesomeIcon.EyeSlash;
-            var label = enabled ? "Adult shown" : "Adult off";
+
+            var (icon, label, tint) = !config.AllowNsfw
+                ? (FontAwesomeIcon.EyeSlash, "Adult hidden", Neutral)
+                : config.BlurAdultThumbnails
+                    ? (FontAwesomeIcon.LowVision, "Adult blurred", Warm)
+                    : (FontAwesomeIcon.Eye, "Adult shown", WarmHovered);
 
             var width = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
             ImGui.SameLine(ImGui.GetContentRegionMax().X - width);
 
             using (ImRaii.Disabled(!applicable))
-            using (enabled ? Theme.Emphasis(Warm, WarmHovered) : Theme.Emphasis(Neutral, NeutralHovered))
+            using (Theme.Emphasis(tint, tint))
             {
                 if (ImGuiComponents.IconButtonWithText(icon, label))
-                    Toggle(plugin, !enabled);
+                    Cycle(plugin);
             }
 
             if (ImGui.IsItemHovered())
             {
                 ImGui.SetTooltip(!applicable
                     ? "The homepage is served by xivmodarchive as-is and takes no filter.\nUse Trending, Newest or Search to browse adult mods."
-                    : enabled
-                        ? "Showing adult mods only.\nxivmodarchive cannot mix adult and regular results in one search."
-                        : "Adult mods are hidden.\nWhile off, xivmodarchive returns 403 for them: they cannot be browsed or installed at all.");
+                    : !config.AllowNsfw
+                        ? "Adult mods are left out entirely.\nClick to mix them in with their thumbnails obscured."
+                        : config.BlurAdultThumbnails
+                            ? "Adult mods are mixed in, thumbnails obscured until hovered.\nClick to reveal them."
+                            : "Adult mods are mixed in and fully visible.\nClick to leave them out.");
             }
+        }
+
+        /// <summary>Passe a l'etat suivant : masques, brouilles, visibles.</summary>
+        private static void Cycle(Plugin plugin)
+        {
+            var config = plugin.Configuration;
+
+            if (!config.AllowNsfw)
+            {
+                config.AllowNsfw = true;
+                config.BlurAdultThumbnails = true;
+                _ = XmaSession.EnsureAsync();
+            }
+            else if (config.BlurAdultThumbnails)
+            {
+                config.BlurAdultThumbnails = false;
+            }
+            else
+            {
+                config.AllowNsfw = false;
+                XmaSession.Close();
+                //Sans cette purge, les pages adultes deja consultees seraient resservies depuis
+                //le cache disque sans jamais repasser par le 403 de XMA.
+                WebClient.ClearHtmlCache();
+            }
+
+            config.Save();
+            plugin.searchWindow.ApplyAdultMode(config.AllowNsfw);
         }
 
         private static readonly Vector4 Warm = new(0.72f, 0.31f, 0.44f, 1f);
