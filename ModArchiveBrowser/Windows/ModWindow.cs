@@ -536,12 +536,18 @@ namespace ModArchiveBrowser.Windows
                 //Mega, Drive ou Patreon sinon. Environ un tiers du catalogue est dans ce second
                 //cas et reste hors de portee : mieux vaut nommer l'hebergeur que laisser un
                 //bouton grise sans explication.
-                if (_installState == InstallState.SameVersion)
+                if (!plugin.penumbra.Available && !PublishedOnHeliosphere)
+                {
+                    //Rien de ce qui suit n'a de sens sans Penumbra : le telechargement aboutirait,
+                    //puis l'appel IPC echouerait sans rien dire a l'utilisateur.
+                    PenumbraNotice.DisabledInstallButton();
+                }
+                else if (_installState == InstallState.SameVersion)
                 {
                     using (ImRaii.Disabled(true))
                         ImGui.Button("Already installed");
 
-                    if (ImGui.IsItemHovered())
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                         ImGui.SetTooltip($"Penumbra already has \"{_installedMatch?.Name}\" in version {_installedMatch?.Version}.");
                 }
                 else if (PublishedOnHeliosphere)
@@ -564,7 +570,8 @@ namespace ModArchiveBrowser.Windows
                     using (ImRaii.Disabled(true))
                         ImGui.Button("Not available");
 
-                    if (ImGui.IsItemHovered())
+                    //Comme plus haut : une infobulle sur un bouton grise exige AllowWhenDisabled.
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                         ImGui.SetTooltip($"Hosted on {ExternalHost()}, outside xivmodarchive.\nUse \"Open in browser\" to get it manually.");
                 }
                 else
@@ -594,7 +601,7 @@ namespace ModArchiveBrowser.Windows
                         default:
                             using (ImRaii.Disabled(true))
                                 ImGui.Button("Not installable");
-                            if (ImGui.IsItemHovered())
+                            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                                 ImGui.SetTooltip($"Penumbra cannot use a {(extension.IsNullOrEmpty() ? "file of this type" : extension)} file.");
                             break;
                     }

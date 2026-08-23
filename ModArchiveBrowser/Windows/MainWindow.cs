@@ -167,6 +167,7 @@ public class MainWindow : Window, IDisposable
         ImGui.TextUnformatted(plugin.modWindow.CurrentModName);
 
         ImGui.Separator();
+        PenumbraNotice.Banner(plugin);
         plugin.modWindow.DrawEmbedded();
     }
 
@@ -186,6 +187,10 @@ public class MainWindow : Window, IDisposable
 
         NavBar.Draw(plugin, CurrentTarget);
         ImGui.Separator();
+
+        //Sous la barre plutot que tout en haut : on annonce d'abord ou l'on est, ensuite ce qui
+        //manque. Le bandeau disparait de lui-meme des que Penumbra est la.
+        PenumbraNotice.Banner(plugin);
 
         switch (CurrentTarget)
         {
@@ -220,13 +225,21 @@ public class MainWindow : Window, IDisposable
         var buttonWidth = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
         ImGui.SameLine(ImGui.GetContentRegionMax().X - buttonWidth);
 
-        using (ImRaii.Disabled(checker.IsRunning))
+        //La verification lit les meta.json du dossier de mods de Penumbra : sans lui, il n'y a
+        //rien a comparer et le bouton lancerait un parcours de zero mod.
+        using (ImRaii.Disabled(checker.IsRunning || !plugin.penumbra.Available))
         {
             if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.SyncAlt, label))
                 checker.Start();
         }
 
         ImGui.Separator();
+
+        if (!plugin.penumbra.Available)
+        {
+            ImGui.TextDisabled("Penumbra is not running, so there are no installed mods to check.");
+            return;
+        }
 
         if (checker.LastRun == null && !checker.IsRunning)
         {

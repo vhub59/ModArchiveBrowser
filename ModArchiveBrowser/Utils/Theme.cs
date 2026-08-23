@@ -29,6 +29,9 @@ namespace ModArchiveBrowser.Utils
         public static readonly Vector4 Positive = new(0.26f, 0.63f, 0.28f, 1.00f);
         public static readonly Vector4 PositiveHovered = new(0.33f, 0.72f, 0.35f, 1.00f);
 
+        /// <summary>Ambre des avertissements : quelque chose manque, sans que rien soit casse.</summary>
+        public static readonly Vector4 Warning = new(0.90f, 0.66f, 0.24f, 1.00f);
+
         /// <summary>
         /// Applique le style pour la duree du bloc. A utiliser avec "using".
         /// </summary>
