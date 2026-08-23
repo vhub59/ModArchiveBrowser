@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures.TextureWraps;
@@ -8,21 +9,32 @@ namespace ModArchiveBrowser.Utils
     /// <summary>
     /// Grille de cartes de mods, partagée par la page d'accueil et la recherche.
     ///
-    /// Les deux fenêtres dessinaient auparavant le même code, dupliqué, avec trois défauts
-    /// communs : l'image était affichée à sa taille d'origine, ce qui donnait des cartes de
-    /// hauteurs différentes et une grille en dents de scie ; le nombre de colonnes était figé à
-    /// trois quelle que soit la largeur de la fenêtre, laissant un large vide à droite ; et les
-    /// vues étaient positionnées par un décalage de cent pixels en dur, donc jamais alignées.
+    /// La carte n'est pas faite de widgets ImGui mais peinte a la main dans la liste de dessin.
+    /// C'est la que se trouve la marge de manoeuvre du framework : les widgets standards donnent
+    /// des rectangles gris a angles vifs, la liste de dessin permet des images rognees a coins
+    /// arrondis, des degrades, et des transitions au survol. Le plugin Heliosphere, souvent cite
+    /// en exemple, tourne lui aussi sur ImGui — la difference tient au dessin, pas au framework.
     /// </summary>
     public static class ModGrid
     {
         /// <summary>Largeur visée pour une carte. Le nombre de colonnes en découle.</summary>
         private const float TargetCardWidth = 300f;
 
-        /// <summary>Proportion de la carte occupée par l'image (16:9).</summary>
+        /// <summary>Proportion de la vignette (16:9).</summary>
         private const float ImageRatio = 9f / 16f;
 
-        /// <summary>Nombre de colonnes tenant dans la largeur disponible, au moins une.</summary>
+        /// <summary>Arrondi des angles de la carte.</summary>
+        private const float Rounding = 8f;
+
+        /// <summary>
+        /// Avancement de l'animation de survol, par carte.
+        ///
+        /// ImGui ne fournit pas de systeme d'animation, mais il redessine a chaque frame : il
+        /// suffit d'interpoler soi-meme une valeur en s'appuyant sur le temps ecoule. C'est ce
+        /// qui separe un survol qui claque d'un survol qui s'allume.
+        /// </summary>
+        private static readonly Dictionary<string, float> HoverProgress = new();
+
         public static int ColumnCount(float availableWidth)
         {
             var spacing = ImGui.GetStyle().ItemSpacing.X;
@@ -30,28 +42,16 @@ namespace ModArchiveBrowser.Utils
             return Math.Max(1, count);
         }
 
-        /// <summary>
-        /// Largeur d'une carte pour ce nombre de colonnes. Les cartes se partagent toute la
-        /// largeur disponible plutôt que de laisser un vide sur le côté.
-        /// </summary>
         public static float CardWidth(float availableWidth, int columns)
         {
             var spacing = ImGui.GetStyle().ItemSpacing.X;
             return (availableWidth - spacing * (columns - 1)) / columns;
         }
 
-        /// <summary>Hauteur d'une carte pour une largeur donnée. Toutes ont la même.</summary>
+        /// <summary>Hauteur d'une carte : la vignette, puis une ligne d'informations.</summary>
         public static float CardHeight(float width)
-        {
-            var imageHeight = MathF.Round(width * ImageRatio);
-            return imageHeight + ImGui.GetTextLineHeightWithSpacing() * 3f + ImGui.GetStyle().FramePadding.Y * 2f;
-        }
+            => MathF.Round(width * ImageRatio) + ImGui.GetTextLineHeightWithSpacing() + ImGui.GetStyle().FramePadding.Y * 2f;
 
-        /// <summary>
-        /// Nombre de cartes tenant dans la zone donnée, pour savoir combien de mods aller
-        /// chercher. XMA n'en sert que quinze par requête : remplir un écran large en demande
-        /// plusieurs.
-        /// </summary>
         public static int Capacity(Vector2 available)
         {
             var columns = ColumnCount(available.X);
@@ -61,12 +61,6 @@ namespace ModArchiveBrowser.Utils
             return columns * rows;
         }
 
-        /// <summary>
-        /// Dessine une carte et renvoie vrai si elle a été cliquée.
-        ///
-        /// La carte entière est cliquable, pas seulement la vignette : un bouton invisible occupe
-        /// toute sa surface et le contenu est peint par-dessus.
-        /// </summary>
         public static bool Draw(string id, ModThumb thumb, IDalamudTextureWrap? texture, float width,
                                 ModAvailability availability = ModAvailability.Unknown)
         {
@@ -75,103 +69,189 @@ namespace ModArchiveBrowser.Utils
             var lineHeight = ImGui.GetTextLineHeightWithSpacing();
 
             var imageHeight = MathF.Round(width * ImageRatio);
-            var height = imageHeight + lineHeight * 3f + pad.Y * 2f;
+            var height = imageHeight + lineHeight + pad.Y * 2f;
 
             var origin = ImGui.GetCursorScreenPos();
             var clicked = ImGui.InvisibleButton(id, new Vector2(width, height));
             var hovered = ImGui.IsItemHovered();
 
+            var lift = Animate(id, hovered);
             var draw = ImGui.GetWindowDrawList();
-            var end = origin + new Vector2(width, height);
 
-            draw.AddRectFilled(origin, end, ImGui.GetColorU32(hovered ? ImGuiCol.FrameBgHovered : ImGuiCol.FrameBg), 6f);
-            draw.AddRect(origin, end, ImGui.GetColorU32(hovered ? ImGuiCol.ButtonHovered : ImGuiCol.Border), 6f);
+            //La carte se souleve legerement au survol. Deux pixels suffisent : au-dela, la grille
+            //se met a bouger et devient penible a parcourir.
+            var top = origin - new Vector2(0f, 2f * lift);
+            var bottom = top + new Vector2(width, height);
 
-            DrawThumbnail(draw, texture, origin, width, imageHeight);
-            DrawAvailabilityBadge(draw, availability, origin);
+            DrawShadow(draw, top, bottom, lift);
+            draw.AddRectFilled(top, bottom, Blend(0xFF1A1C20u, 0xFF23262Cu, lift), Rounding);
+            DrawThumbnail(draw, texture, top, width, imageHeight);
+            DrawScrim(draw, top, width, imageHeight);
+            DrawTitle(draw, thumb, top, width, imageHeight, pad);
+            DrawBadge(draw, availability, top, width);
+            DrawFooter(draw, thumb, top, width, imageHeight, pad, lineHeight);
+
+            //Bordure par-dessus tout le reste, pour que l'image ne deborde pas sur l'arrondi.
+            draw.AddRect(top, bottom, Blend(0x40FFFFFFu, ImGui.GetColorU32(ImGuiCol.ButtonHovered), lift), Rounding, ImDrawFlags.None, 1f + lift);
 
             if (hovered && availability != ModAvailability.Unknown)
                 ImGui.SetTooltip(AvailabilityIndex.Describe(availability));
-
-            //Tout le contenu est peint par la liste de dessin, jamais par des widgets.
-            //Un widget dessine apres le bouton invisible deviendrait le "dernier element" d'ImGui,
-            //et le ImGui.SameLine() de l'appelant s'alignerait sur lui plutot que sur la carte :
-            //les cartes se decalaient alors en escalier. Le bouton invisible doit rester le
-            //dernier element de la carte.
-            var textLeft = origin.X + pad.X;
-            var textWidth = width - pad.X * 2f;
-            var textColor = ImGui.GetColorU32(ImGuiCol.Text);
-            var mutedColor = ImGui.GetColorU32(ImGuiCol.TextDisabled);
-            var baseY = origin.Y + imageHeight + pad.Y;
-
-            draw.AddText(new Vector2(textLeft, baseY), textColor, Ellipsize(thumb.name, textWidth));
-            draw.AddText(new Vector2(textLeft, baseY + lineHeight), mutedColor, Ellipsize($"by {thumb.author}", textWidth));
-
-            //Type, genre et vues sur une seule ligne : les vues alignées à droite, calculées et
-            //non décalées de cent pixels au jugé.
-            var views = thumb.views?.Trim() ?? string.Empty;
-            var viewsWidth = string.IsNullOrEmpty(views) ? 0f : ImGui.CalcTextSize(views).X;
-            var metaY = baseY + lineHeight * 2f;
-            var metaWidth = MathF.Max(0f, textWidth - viewsWidth - pad.X);
-
-            draw.AddText(new Vector2(textLeft, metaY), mutedColor, Ellipsize($"{thumb.type} · {thumb.genders}", metaWidth));
-
-            if (!string.IsNullOrEmpty(views))
-                draw.AddText(new Vector2(origin.X + width - pad.X - viewsWidth, metaY), mutedColor, views);
 
             return clicked;
         }
 
         /// <summary>
-        /// Pastille d'installabilité, en haut à gauche de la vignette.
+        /// Fait progresser l'animation de survol vers 0 ou 1 et renvoie sa valeur.
         ///
-        /// Rien n'est dessiné tant que le mod n'a pas été consulté : l'index se construisant a
-        /// l'usage, marquer les mods inconnus d'un point d'interrogation couvrirait la grille de
-        /// signes sans information. L'absence de pastille se lit alors "pas encore su", ce qui
-        /// est la verite.
+        /// DeltaTime est le temps ecoule depuis la frame precedente : l'animation dure le meme
+        /// temps quel que soit le nombre d'images par seconde.
         /// </summary>
-        private static void DrawAvailabilityBadge(ImDrawListPtr draw, ModAvailability availability, Vector2 origin)
+        private static float Animate(string id, bool hovered)
+        {
+            const float duration = 0.14f;
+
+            HoverProgress.TryGetValue(id, out var value);
+            var step = ImGui.GetIO().DeltaTime / duration;
+            value = Math.Clamp(hovered ? value + step : value - step, 0f, 1f);
+
+            if (value <= 0f)
+                HoverProgress.Remove(id);
+            else
+                HoverProgress[id] = value;
+
+            return value;
+        }
+
+        private static void DrawShadow(ImDrawListPtr draw, Vector2 top, Vector2 bottom, float lift)
+        {
+            if (lift <= 0f)
+                return;
+
+            //Ombre portee approximee par quelques rectangles concentriques de plus en plus pales.
+            //ImGui n'a pas de flou, mais l'empilement suffit a suggerer l'elevation.
+            for (var i = 3; i >= 1; i--)
+            {
+                var spread = i * 2f * lift;
+                var alpha = (uint)(18f * lift) << 24;
+                draw.AddRect(top - new Vector2(spread, spread), bottom + new Vector2(spread, spread),
+                    alpha, Rounding + spread, ImDrawFlags.None, 2f);
+            }
+        }
+
+        private static void DrawThumbnail(ImDrawListPtr draw, IDalamudTextureWrap? texture, Vector2 top, float width, float imageHeight)
+        {
+            var imageEnd = top + new Vector2(width, imageHeight);
+
+            if (texture == null || texture.Width <= 0 || texture.Height <= 0)
+            {
+                draw.AddRectFilled(top, imageEnd, 0xFF15171Au, Rounding, ImDrawFlags.RoundCornersTop);
+
+                const string label = "Loading...";
+                var size = ImGui.CalcTextSize(label);
+                draw.AddText(top + new Vector2((width - size.X) / 2f, (imageHeight - size.Y) / 2f),
+                    ImGui.GetColorU32(ImGuiCol.TextDisabled), label);
+                return;
+            }
+
+            //Cadrage "cover" : l'image remplit tout le cadre et deborde sur le cote le plus long,
+            //plutot que de laisser des bandes noires. Le rognage se fait dans les coordonnees de
+            //texture, ce qui evite de deformer l'image.
+            var scale = MathF.Max(width / texture.Width, imageHeight / texture.Height);
+            var drawnWidth = texture.Width * scale;
+            var drawnHeight = texture.Height * scale;
+
+            var uvWidth = width / drawnWidth;
+            var uvHeight = imageHeight / drawnHeight;
+            var uv0 = new Vector2((1f - uvWidth) / 2f, (1f - uvHeight) / 2f);
+            var uv1 = uv0 + new Vector2(uvWidth, uvHeight);
+
+            draw.AddImageRounded(texture.Handle, top, imageEnd, uv0, uv1, 0xFFFFFFFFu, Rounding, ImDrawFlags.RoundCornersTop);
+        }
+
+        /// <summary>
+        /// Degrade sombre sur le bas de la vignette.
+        ///
+        /// Le titre est ecrit par-dessus l'image : sans ce voile, il devient illisible des que la
+        /// vignette est claire — et beaucoup le sont, les auteurs y mettant souvent des fonds
+        /// blancs ou des captures en plein jour.
+        /// </summary>
+        private static void DrawScrim(ImDrawListPtr draw, Vector2 top, float width, float imageHeight)
+        {
+            var scrimHeight = imageHeight * 0.5f;
+            var scrimTop = top + new Vector2(0f, imageHeight - scrimHeight);
+            var scrimBottom = top + new Vector2(width, imageHeight);
+
+            draw.AddRectFilledMultiColor(scrimTop, scrimBottom, 0x00000000u, 0x00000000u, 0xE6000000u, 0xE6000000u);
+        }
+
+        private static void DrawTitle(ImDrawListPtr draw, ModThumb thumb, Vector2 top, float width, float imageHeight, Vector2 pad)
+        {
+            var lineHeight = ImGui.GetTextLineHeight();
+            var textWidth = width - pad.X * 2f;
+
+            var title = Ellipsize(thumb.name, textWidth);
+            var author = Ellipsize($"by {thumb.author}", textWidth);
+
+            draw.AddText(top + new Vector2(pad.X, imageHeight - pad.Y - lineHeight * 2f - 2f), 0xFFFFFFFFu, title);
+            draw.AddText(top + new Vector2(pad.X, imageHeight - pad.Y - lineHeight), 0xB0FFFFFFu, author);
+        }
+
+        private static void DrawFooter(ImDrawListPtr draw, ModThumb thumb, Vector2 top, float width, float imageHeight, Vector2 pad, float lineHeight)
+        {
+            var y = top.Y + imageHeight + pad.Y;
+            var muted = ImGui.GetColorU32(ImGuiCol.TextDisabled);
+
+            var views = thumb.views?.Trim() ?? string.Empty;
+            var viewsWidth = string.IsNullOrEmpty(views) ? 0f : ImGui.CalcTextSize(views).X;
+            var metaWidth = MathF.Max(0f, width - pad.X * 2f - viewsWidth - pad.X);
+
+            draw.AddText(new Vector2(top.X + pad.X, y), muted, Ellipsize($"{thumb.type} · {thumb.genders}", metaWidth));
+
+            if (!string.IsNullOrEmpty(views))
+                draw.AddText(new Vector2(top.X + width - pad.X - viewsWidth, y), muted, views);
+        }
+
+        /// <summary>
+        /// Pastille d'installabilité, posee dans le coin de la vignette.
+        ///
+        /// Rien n'est dessine tant que le mod n'a pas ete consulte : l'index se construisant a
+        /// l'usage, marquer les inconnus couvrirait la grille de signes sans information.
+        /// </summary>
+        private static void DrawBadge(ImDrawListPtr draw, ModAvailability availability, Vector2 top, float width)
         {
             if (availability == ModAvailability.Unknown)
                 return;
 
-            var color = availability switch
+            var (color, label) = availability switch
             {
-                ModAvailability.Installable => 0xFF4CAF50u, // vert
-                ModAvailability.Archive => 0xFF3BA5EBu,     // ambre
-                ModAvailability.External => 0xFF6B6B6Bu,    // gris
-                ModAvailability.Heliosphere => 0xFFD9822Bu, // bleu : autre plateforme, pas un cul-de-sac
-                _ => 0xFF4C4CE0u,                            // rouge
+                ModAvailability.Installable => (0xFF4CAF50u, "READY"),
+                ModAvailability.Archive => (0xFF3BA5EBu, "ZIP"),
+                ModAvailability.Heliosphere => (0xFFD9822Bu, "HELIO"),
+                ModAvailability.External => (0xFF6B6B6Bu, "LINK"),
+                _ => (0xFF4C4CE0u, "N/A"),
             };
 
-            var position = origin + new Vector2(6f, 6f);
-            var size = new Vector2(10f, 10f);
+            var textSize = ImGui.CalcTextSize(label);
+            var padding = new Vector2(6f, 3f);
+            var size = textSize + padding * 2f;
+            var position = top + new Vector2(width - size.X - 8f, 8f);
 
-            //Un liseré sombre détache la pastille des vignettes claires.
-            draw.AddRectFilled(position - Vector2.One, position + size + Vector2.One, 0xC0000000u, 3f);
-            draw.AddRectFilled(position, position + size, color, 2f);
+            draw.AddRectFilled(position, position + size, color, size.Y / 2f);
+            draw.AddText(position + padding, 0xFF101010u, label);
         }
 
-        private static void DrawThumbnail(ImDrawListPtr draw, IDalamudTextureWrap? texture, Vector2 origin, float width, float imageHeight)
+        /// <summary>Interpole deux couleurs ARGB empaquetees.</summary>
+        private static uint Blend(uint from, uint to, float t)
         {
-            if (texture == null || texture.Width <= 0 || texture.Height <= 0)
+            t = Math.Clamp(t, 0f, 1f);
+            uint Channel(int shift)
             {
-                const string label = "Loading...";
-                var size = ImGui.CalcTextSize(label);
-                draw.AddText(
-                    origin + new Vector2((width - size.X) / 2f, (imageHeight - size.Y) / 2f),
-                    ImGui.GetColorU32(ImGuiCol.TextDisabled),
-                    label);
-                return;
+                var a = (from >> shift) & 0xFF;
+                var b = (to >> shift) & 0xFF;
+                return (uint)(a + (b - (float)a) * t) & 0xFF;
             }
 
-            //Ratio préservé et image centrée dans son cadre. Auparavant elle était dessinée à sa
-            //taille d'origine, d'où des cartes de hauteurs inégales.
-            var scale = MathF.Min(width / texture.Width, imageHeight / texture.Height);
-            var drawn = new Vector2(texture.Width * scale, texture.Height * scale);
-            var position = origin + new Vector2((width - drawn.X) / 2f, (imageHeight - drawn.Y) / 2f);
-
-            draw.AddImage(texture.Handle, position, position + drawn);
+            return Channel(0) | (Channel(8) << 8) | (Channel(16) << 16) | (Channel(24) << 24);
         }
 
         /// <summary>
