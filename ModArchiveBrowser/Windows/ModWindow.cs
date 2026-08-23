@@ -51,9 +51,23 @@ namespace ModArchiveBrowser.Windows
             RefreshInstalledState();
         }
 
-        /// <summary>Vrai si le fichier est heberge par XMA, donc installable directement.</summary>
+        /// <summary>Vrai si le fichier est heberge par XMA, donc telechargeable directement.</summary>
         private bool HostedByXma =>
             mod.HasValue && mod.Value.url_download_button.Contains("private");
+
+        /// <summary>Extension du fichier propose au telechargement, en minuscules (".pmp", ".zip"...).</summary>
+        private string DownloadExtension()
+        {
+            try
+            {
+                var path = new Uri(WebClient.xivmodarchiveRoot + mod!.Value.url_download_button).AbsolutePath;
+                return Path.GetExtension(Uri.UnescapeDataString(path)).ToLowerInvariant();
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
 
         /// <summary>Nom de l'hebergeur externe, pour l'expliquer a l'utilisateur.</summary>
         private string ExternalHost()
@@ -323,20 +337,48 @@ namespace ModArchiveBrowser.Windows
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip("Penumbra already has a mod with this name.");
                 }
-                else if (HostedByXma)
-                {
-                    if (ImGui.Button("Install using Penumbra"))
-                    {
-                        StartInstall();
-                    }
-                }
-                else
+                else if (!HostedByXma)
                 {
                     ImGui.BeginDisabled();
                     ImGui.Button("Not available");
                     ImGui.EndDisabled();
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip($"Hosted on {ExternalHost()}, outside xivmodarchive.\nUse \"Open in browser\" to get it manually.");
+                }
+                else
+                {
+                    //Etre heberge par XMA ne suffit pas : encore faut-il que le fichier soit un
+                    //modpack. Un .pmp ou un .ttmp2 s'installe a coup sur ; une archive peut tout
+                    //aussi bien contenir les sources de l'auteur (.psd, .blend) et ne rien
+                    //donner. Le bouton promettait "Install using Penumbra" dans tous les cas.
+                    var extension = DownloadExtension();
+                    switch (extension)
+                    {
+                        case ".pmp":
+                        case ".ttmp2":
+                            if (ImGui.Button("Install using Penumbra"))
+                                StartInstall();
+                            break;
+
+                        case ".zip":
+                        case ".rar":
+                        case ".7z":
+                            if (ImGui.Button($"Try installing ({extension})"))
+                                StartInstall();
+                            if (ImGui.IsItemHovered())
+                                ImGui.SetTooltip(
+                                    "This is an archive, not a modpack. It will be searched for a\n" +
+                                    ".pmp or .ttmp2, but may only hold the author's source files.");
+                            break;
+
+                        default:
+                            ImGui.BeginDisabled();
+                            ImGui.Button("Not installable");
+                            ImGui.EndDisabled();
+                            if (ImGui.IsItemHovered())
+                                ImGui.SetTooltip($"Penumbra cannot use a {(extension.IsNullOrEmpty() ? "file of this type" : extension)} file.");
+                            break;
+                    }
                 }
 
                 ImGui.SameLine();
