@@ -149,19 +149,29 @@ namespace ModArchiveBrowser.Windows
                     bool nsfwAllowed = plugin.Configuration.AllowNsfw;
                     bool nsfwSelected = nsfwAllowed && selectedNSFW == NSFW.True;
 
+                    //"Adult mods only" et non "NSFW" : le filtre de XMA est exclusif, pas additif.
+                    //Mesure faite sur le tag bibo+ : sans le parametre, 3391 resultats ; avec
+                    //nsfw=true, 1281 — et aucun des 3391 precedents. Cocher ne complete donc pas
+                    //la liste, il la remplace entierement, ce que l'ancienne etiquette laissait
+                    //croire au point de faire passer le filtre pour casse.
                     ImGui.BeginDisabled(!nsfwAllowed);
-                    if (ImGui.Checkbox("NSFW", ref nsfwSelected))
+                    if (ImGui.Checkbox("Adult mods only", ref nsfwSelected))
                     {
                         selectedNSFW = nsfwSelected ? NSFW.True : NSFW.False;
                     }
                     ImGui.EndDisabled();
 
+                    if (ImGui.IsItemHovered())
+                    {
+                        ImGui.SetTooltip(nsfwAllowed
+                            ? "Replaces the results with adult mods only.\nxivmodarchive cannot mix both in one search."
+                            : "Enable \"Show adult (NSFW) mods\" in the plugin settings first.");
+                    }
+
                     if (!nsfwAllowed)
                     {
                         //Accord retiré en cours de session : un ancien choix ne doit pas survivre.
                         selectedNSFW = NSFW.False;
-                        if (ImGui.IsItemHovered())
-                            ImGui.SetTooltip("Enable \"Show adult (NSFW) mods\" in the plugin settings first.");
                     }
                     // DT Compatibility Dropdown
                     string[] dtCompatOptions = { "Compatible", "Tex Tools partial","Partial Compatibility","Not compatible" };

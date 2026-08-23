@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui;
+﻿using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -116,5 +116,33 @@ namespace ModArchiveBrowser.Utils
         /// <param name="itemWidth">The width to center for.</param>
         public static void CenterCursorFor(float itemWidth) =>
             ImGui.SetCursorPosX((int)((ImGui.GetWindowWidth() - itemWidth) / 2));
+
+        /// <summary>
+        /// Cadre neutre occupant la place d'une image absente ou en cours de chargement.
+        ///
+        /// Remplace les boutons "Failed to ..." qui traînaient dans l'interface : une image qui
+        /// met une seconde à arriver n'est pas une erreur, et l'afficher comme telle donne
+        /// l'impression que le plugin est cassé. La mise en page ne bouge pas non plus, puisque
+        /// le cadre occupe exactement les mêmes dimensions que l'image attendue.
+        /// </summary>
+        public static void PlaceholderBox(Vector2 size, string label = "")
+        {
+            var start = ImGui.GetCursorScreenPos();
+            var draw = ImGui.GetWindowDrawList();
+
+            draw.AddRectFilled(start, start + size, ImGui.GetColorU32(ImGuiCol.FrameBg), 4f);
+            draw.AddRect(start, start + size, ImGui.GetColorU32(ImGuiCol.Border), 4f);
+
+            if (!string.IsNullOrEmpty(label))
+            {
+                var textSize = ImGui.CalcTextSize(label);
+                draw.AddText(
+                    start + (size - textSize) / 2,
+                    ImGui.GetColorU32(ImGuiCol.TextDisabled),
+                    label);
+            }
+
+            ImGui.Dummy(size);
+        }
     }
 }

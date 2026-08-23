@@ -173,7 +173,7 @@ public class ConfigWindow : Window, IDisposable
         ImGui.SameLine();
         if(ImGui.Button("Clear Image Cache")){
             StaticHelpers.ClearCacheFully(Configuration.CacheImagePath);
-            plugin.imageHandler._downloadedFilenames.Clear();
+            plugin.imageHandler.ClearCache();
         }
         ImGui.Text($"Current Mod cache size:{StaticHelpers.CalculateFolderSizeInMB(Configuration.CacheModPath):F2} MB");
         ImGui.SameLine();

@@ -25,7 +25,6 @@ namespace ModArchiveBrowser.Windows
         private Plugin plugin;
         private Mod? mod;
         private HtmlNodeCollection descriptionNodes;
-        private bool failedAvatarUrl = false;
         private bool _isLoading = false;
         private string _statusMessage = string.Empty;
         private bool lastNodeWasBr = false;
@@ -42,13 +41,11 @@ namespace ModArchiveBrowser.Windows
         public void ChangeMod(ModThumb modThumb)
         {
             (this.mod,this.descriptionNodes) = WebClient.GetModPage(modThumb);
-            failedAvatarUrl = false ;
         }
 
         public void ChangeMod(string modId)
         {
             (this.mod, this.descriptionNodes) = WebClient.GetModPage(modId);
-            failedAvatarUrl = false;
         }
         public void Dispose()
         {
@@ -189,23 +186,29 @@ namespace ModArchiveBrowser.Windows
             {
                 // Mod Title
                 ImGui.BeginChild("LeftColumn", new Vector2(0, 0), true);
-                ImGui.Text(mod.Value.modThumb.name);
+                //TextWrapped et non Text : les titres de mods sont longs et se faisaient couper
+                //en plein milieu, sans meme une ellipse.
+                ImGui.TextWrapped(mod.Value.modThumb.name);
 
                 ImGui.Separator();
 
                 // Author
-                ImGui.Text($"{mod.Value.modThumb.type} by {mod.Value.modThumb.author}");
+                ImGui.TextWrapped($"{mod.Value.modThumb.type} by {mod.Value.modThumb.author}");
 
                 // Image Carousel Placeholder
                 ImGui.Text("Mod Preview Image");
-                var modThumbnail = Plugin.TextureProvider.GetFromFile(plugin.imageHandler.GetImage(mod.Value.modThumb.url_thumb)).GetWrapOrDefault();
+                var thumbPath = plugin.imageHandler.GetImage(mod.Value.modThumb.url_thumb);
+                var modThumbnail = thumbPath.IsNullOrEmpty()
+                    ? null
+                    : Plugin.TextureProvider.GetFromFile(thumbPath).GetWrapOrDefault();
+
                 if (modThumbnail != null)
                 {
                     ImGui.Image(modThumbnail.Handle, new Vector2(300, 200)); // Placeholder for image carousel
                 }
                 else
                 {
-                    ImGui.Button("Failed to load thumbnail", new Vector2(300, 200));
+                    StaticHelpers.PlaceholderBox(new Vector2(300, 200), "Loading preview...");
                 }
 
                 // Tabs (Info, Files, History)
@@ -221,30 +224,24 @@ namespace ModArchiveBrowser.Windows
                 ImGui.BeginChild("RightColumn", new Vector2(0, 0), true);
 
                 // Author Card
-                ImGui.Text(mod.Value.modThumb.author);
-                if (!failedAvatarUrl)
+                ImGui.TextWrapped(mod.Value.modThumb.author);
+
+                //L'avatar arrive de façon asynchrone : GetImage renvoie une chaîne vide tant
+                //qu'il n'est pas là, puis son chemin. Plus de verrou d'échec ici : l'ancien
+                //failedAvatarUrl se posait dès la première frame, forcément sans image, et ne se
+                //relâchait jamais — l'avatar restait donc condamné même une fois téléchargé.
+                var authorpicpath = plugin.imageHandler.GetImage(mod.Value.url_author_profilepic);
+                var authorpicThumbnail = authorpicpath.IsNullOrEmpty()
+                    ? null
+                    : Plugin.TextureProvider.GetFromFile(authorpicpath).GetWrapOrDefault();
+
+                if (authorpicThumbnail != null)
                 {
-                    var authorpicpath = plugin.imageHandler.GetImage(mod.Value.url_author_profilepic);
-                    if (!authorpicpath.IsNullOrEmpty())
-                    {
-                        var authorpicThumbnail = Plugin.TextureProvider.GetFromFile(authorpicpath).GetWrapOrDefault();
-                        if (authorpicThumbnail != null)
-                        {
-                            ImGui.Image(authorpicThumbnail.Handle, new Vector2(100, 100));
-                        }
-                        else
-                        {
-                            ImGui.Button("Failed to turn user avatar into texture", new Vector2(100, 100)); // Placeholder for avatar
-                        }
-                    }
-                    else
-                    {
-                        failedAvatarUrl = true;
-                    }
+                    ImGui.Image(authorpicThumbnail.Handle, new Vector2(100, 100));
                 }
                 else
                 {
-                    ImGui.Button("Failed to GET authorprofile", new Vector2(100, 100));
+                    StaticHelpers.PlaceholderBox(new Vector2(100, 100));
                 }
                 ImGui.Separator();
 
