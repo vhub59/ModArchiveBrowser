@@ -143,12 +143,43 @@ namespace ModArchiveBrowser
             return(ParseModPage(page,mdThumb),descriptionNodeStart);
         }
 
-        public static List<ModThumb> DoSearch(string searchUrl)
+        /// <summary>
+        /// Resultats d'une recherche : la page demandee, et de quoi situer cette page dans
+        /// l'ensemble.
+        ///
+        /// Sans le total, l'interface annoncait "15 mods" — le contenu d'une page — pour une
+        /// recherche en comptant 1854, ce qui donnait l'impression que le filtre avait tout
+        /// balaye ou que la recherche etait cassee.
+        /// </summary>
+        public readonly record struct SearchResults(List<ModThumb> Mods, int TotalCount, int PageCount);
+
+        public static SearchResults DoSearch(string searchUrl)
         {
             string url = xivmodarchiveRoot + '/' + searchUrl;
             HtmlDocument page = ClientInstance.Load(url);
             Plugin.Logger.Debug("Request made");
-            return ParseSearchResults(page);
+
+            return new SearchResults(
+                ParseSearchResults(page),
+                ParseCount(page, @"([\d,]+)\s*Results"),
+                ParseCount(page, @"over\s+([\d,]+)\s*\n?\s*Pages"));
+        }
+
+        /// <summary>Extrait un nombre de l'entete de resultats, ou zero s'il est introuvable.</summary>
+        private static int ParseCount(HtmlDocument page, string pattern)
+        {
+            try
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(page.DocumentNode.InnerHtml, pattern);
+                if (match.Success && int.TryParse(match.Groups[1].Value.Replace(",", string.Empty), out var value))
+                    return value;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.Debug($"Could not read the result count: {e.Message}");
+            }
+
+            return 0;
         }
 
         public static ModThumb GetModThumbFromFullPage(HtmlDocument page,string url)

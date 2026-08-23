@@ -35,6 +35,9 @@ namespace ModArchiveBrowser.Windows
         private string modAffects = "";
         private string modComments = "";
         private int page = 1;
+        //Total de la recherche et nombre de pages, distincts du contenu de la page courante.
+        private int totalCount = 0;
+        private int pageCount = 0;
         private Task searchTask = null;
         private List<ModThumb> modThumbs = new List<ModThumb>();
         ConcurrentDictionary<string, ISharedImmediateTexture> images = new ConcurrentDictionary<string, ISharedImmediateTexture>();
@@ -58,8 +61,10 @@ namespace ModArchiveBrowser.Windows
         {
             searchTask = Task.Run((async () =>
                                       {
-                                          List<ModThumb> searchRes = WebClient.DoSearch(url);
-                                          this.modThumbs=searchRes;
+                                          var searchRes = WebClient.DoSearch(url);
+                                          this.modThumbs = searchRes.Mods;
+                                          this.totalCount = searchRes.TotalCount;
+                                          this.pageCount = searchRes.PageCount;
                                           RebuildSharedTextures();
                                       }));
         }
@@ -89,7 +94,7 @@ namespace ModArchiveBrowser.Windows
         /// </summary>
         public void DrawEmbedded(string title)
         {
-            NavBar.Context(title, modThumbs?.Count ?? 0, page);
+            NavBar.Context(title, totalCount > 0 ? totalCount : modThumbs?.Count ?? 0, page, pageCount);
             ImGui.Separator();
 
             DrawSearchHeader();
