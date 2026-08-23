@@ -9,6 +9,8 @@ using Dalamud.Interface.Internal;
 using Dalamud.Interface.Utility;
 using Dalamud.Plugin.Services;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Components;
 using Penumbra.Api.IpcSubscribers;
 using Penumbra.Api.Enums;
 using Dalamud.Utility;
@@ -117,8 +119,13 @@ namespace ModArchiveBrowser.Windows
             switch (_installState)
             {
                 case InstallState.DifferentVersion:
-                    if (ImGui.Button("Update"))
-                        StartInstall();
+                    //Vert : c'est l'action principale de l'ecran, elle doit se distinguer des
+                    //boutons secondaires qui l'entourent.
+                    using (Theme.Emphasis(Theme.Positive, Theme.PositiveHovered))
+                    {
+                        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.ArrowUp, "Update"))
+                            StartInstall();
+                    }
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip(
                             $"Penumbra has \"{_installedMatch?.Name}\" in version {_installedMatch?.Version}.\n" +
@@ -135,8 +142,11 @@ namespace ModArchiveBrowser.Windows
                     break;
 
                 default:
-                    if (ImGui.Button("Install using Penumbra"))
-                        StartInstall();
+                    using (Theme.Emphasis(Theme.Positive, Theme.PositiveHovered))
+                    {
+                        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, "Install"))
+                            StartInstall();
+                    }
                     break;
             }
         }
@@ -323,6 +333,8 @@ namespace ModArchiveBrowser.Windows
 
         private void DrawModPage()
         {
+            using var theme = Theme.Scope();
+
             if (_isLoading)
             {
                 DrawLoading();
@@ -435,7 +447,7 @@ namespace ModArchiveBrowser.Windows
                     //Leur plugin n'expose aucune IPC — il ne fait que consommer celle de Penumbra —
                     //on ne peut donc pas lui passer la main directement. Ouvrir leur page suffit :
                     //le bouton d'installation de leur site s'en charge.
-                    if (ImGui.Button("Open in Heliosphere"))
+                    if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.ExternalLinkAlt, "Open in Heliosphere"))
                         Process.Start(new ProcessStartInfo(mod.Value.url_download_button) { UseShellExecute = true });
 
                     if (ImGui.IsItemHovered())
@@ -483,7 +495,7 @@ namespace ModArchiveBrowser.Windows
                 }
 
                 ImGui.SameLine();
-                if(ImGui.Button("Open in browser"))
+                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Globe, "Open in browser"))
                 {
                     Process.Start(new ProcessStartInfo(WebClient.xivmodarchiveRoot + mod.Value.modThumb.url) { UseShellExecute = true });
                 }

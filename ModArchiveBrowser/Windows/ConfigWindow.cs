@@ -84,6 +84,8 @@ public class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
+        using var theme = Theme.Scope();
+
         if (_openFileDialog)
         {
             dialogManager.Draw();

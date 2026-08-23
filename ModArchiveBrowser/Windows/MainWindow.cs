@@ -150,6 +150,10 @@ public class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
+        //Le theme est applique ici, autour de tout le contenu : chaque widget dessine en dessous
+        //en herite, sans avoir a le repeter.
+        using var theme = Theme.Scope();
+
         //Une seule fenetre pour toutes les vues. La barre change le contenu sur place au lieu
         //de fermer une fenetre pour en ouvrir une autre, d'aspect identique et sans transition.
         NavBar.Draw(plugin, CurrentTarget);

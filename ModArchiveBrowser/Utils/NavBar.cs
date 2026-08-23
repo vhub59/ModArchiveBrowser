@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Components;
 
 namespace ModArchiveBrowser.Utils
 {
@@ -27,19 +29,19 @@ namespace ModArchiveBrowser.Utils
     {
         public static void Draw(Plugin plugin, NavTarget current)
         {
-            Tab(plugin, current, NavTarget.Home, "Home", "The archive homepage");
+            Tab(plugin, current, NavTarget.Home, FontAwesomeIcon.Home, "Home", "The archive homepage");
 
             ImGui.SameLine();
             ImGui.TextDisabled("|");
             ImGui.SameLine();
 
-            Tab(plugin, current, NavTarget.Search, "Search", "Search the archive with filters");
+            Tab(plugin, current, NavTarget.Search, FontAwesomeIcon.Search, "Search", "Search the archive with filters");
             ImGui.SameLine();
-            Tab(plugin, current, NavTarget.Trending, "Trending", "Today's most viewed mods");
+            Tab(plugin, current, NavTarget.Trending, FontAwesomeIcon.FireAlt, "Trending", "Today's most viewed mods");
             ImGui.SameLine();
-            Tab(plugin, current, NavTarget.Newest, "Newest", "Newest mods from all users");
+            Tab(plugin, current, NavTarget.Newest, FontAwesomeIcon.Certificate, "Newest", "Newest mods from all users");
             ImGui.SameLine();
-            Tab(plugin, current, NavTarget.Sponsored, "Sponsored", "New and updated mods from Patreon subscribers");
+            Tab(plugin, current, NavTarget.Sponsored, FontAwesomeIcon.Star, "Sponsored", "New and updated mods from Patreon subscribers");
         }
 
         /// <summary>
@@ -67,7 +69,7 @@ namespace ModArchiveBrowser.Utils
             ImGui.TextDisabled($"·  {detail}");
         }
 
-        private static void Tab(Plugin plugin, NavTarget current, NavTarget target, string label, string tooltip)
+        private static void Tab(Plugin plugin, NavTarget current, NavTarget target, FontAwesomeIcon icon, string label, string tooltip)
         {
             var active = current == target;
 
@@ -80,7 +82,9 @@ namespace ModArchiveBrowser.Utils
                 ImGui.PushStyleColor(ImGuiCol.ButtonHovered, accent);
             }
 
-            if (ImGui.Button(label) && !active)
+            //Icone plus libelle : le pictogramme se repere d'un coup d'oeil, le mot leve
+            //l'ambiguite. Un onglet purement graphique obligerait a survoler pour comprendre.
+            if (ImGuiComponents.IconButtonWithText(icon, label) && !active)
                 Navigate(plugin, target);
 
             if (active)
