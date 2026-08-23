@@ -94,6 +94,10 @@ namespace ModArchiveBrowser.Tests
 
             Assert.False(string.IsNullOrWhiteSpace(facts.DownloadUrl), "The download link selector found nothing.");
             Assert.NotEqual(ModAvailability.Unknown, ClassifyOf(facts.DownloadUrl));
+
+            //La vignette voyage avec le reste : c'est elle qui permet a une mise a jour, qui ne
+            //part que d'un identifiant, de conserver l'image affichee dans Penumbra.
+            Assert.False(string.IsNullOrWhiteSpace(facts.ThumbUrl), "The thumbnail selector found nothing.");
         }
 
         /// <summary>Traverse l'index pour atteindre la classification, qui est privee.</summary>

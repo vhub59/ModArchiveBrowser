@@ -38,6 +38,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Compare les mods installes a ce que XMA publie.</summary>
     public readonly UpdateChecker updateChecker;
 
+    /// <summary>Applique les mises a jour detectees, en remplacant les mods plutot qu'en les empilant.</summary>
+    public readonly UpdateInstaller updateInstaller;
+
     /// <summary>Renseigne l'installabilite des mods affiches avant qu'on ne clique dessus.</summary>
     public readonly AvailabilityPrefetcher prefetcher;
 
@@ -68,6 +71,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(searchWindow);
         penumbra = new PenumbraService(PluginInterface,this);
         updateChecker = new UpdateChecker(this);
+        updateInstaller = new UpdateInstaller(this);
         prefetcher = new AvailabilityPrefetcher(this);
 
         CommandManager.AddHandler("/archive", new CommandInfo(OnCommand)

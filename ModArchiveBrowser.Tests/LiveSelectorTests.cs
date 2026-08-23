@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 using HtmlAgilityPack;
 using ModArchiveBrowser.Utils;
@@ -114,6 +115,13 @@ namespace ModArchiveBrowser.Tests
         /// L'historique des versions ne passe pas par le HTML mais par un endpoint JSON, celui-la
         /// meme qu'interroge l'onglet History du site. Il peut disparaitre ou changer de forme
         /// independamment de la mise en page.
+        ///
+        /// On verifie la forme et non le contenu. Une premiere version de ce test exigeait qu'un
+        /// mod parmi les cinq premiers ait des entrees, et il a echoue des le deuxieme passage :
+        /// beaucoup de mods n'ont jamais ete mis a jour depuis leur publication, et le classement
+        /// du jour decide lesquels on regarde. Un tableau vide est une reponse valide ; ce qui ne
+        /// doit pas changer, c'est que la propriete existe et soit un tableau — c'est tout ce dont
+        /// GetVersionHistory depend.
         /// </summary>
         [Fact]
         public async Task The_version_history_endpoint_still_answers()
@@ -121,14 +129,22 @@ namespace ModArchiveBrowser.Tests
             var results = WebClient.ParseSearchResults(
                 await Fetch("/" + WebClient.BuildSearchURL(SortBy.Rank, SortOrder.Desc, nsfw: NSFW.False)));
 
-            //Un mod recemment mis a jour a forcement un historique ; le premier venu peut n'en
-            //avoir aucun sans que rien ne soit casse. On accepte donc qu'un seul reponde.
-            var answered = results.Take(5)
-                .Select(mod => AvailabilityIndex.ModIdFromUrl(mod.url))
-                .Where(id => id != null)
-                .Any(id => WebClient.GetVersionHistory(id!).Count > 0);
+            var modId = AvailabilityIndex.ModIdFromUrl(results.First().url);
+            Assert.NotNull(modId);
 
-            Assert.True(answered, "None of the first five mods returned any version history.");
+            var json = await Client.GetStringAsync($"{Root}/api/mod/update_history?modid={modId}");
+            using var document = JsonDocument.Parse(json);
+
+            Assert.True(document.RootElement.TryGetProperty("version_history", out var history),
+                "The endpoint no longer returns a version_history property.");
+            Assert.Equal(JsonValueKind.Array, history.ValueKind);
+
+            //Quand il y a des entrees, elles doivent porter les champs que le plugin y lit.
+            foreach (var entry in history.EnumerateArray())
+            {
+                Assert.True(entry.TryGetProperty("version_new", out _), "An entry has no version_new.");
+                Assert.True(entry.TryGetProperty("version_previous", out _), "An entry has no version_previous.");
+            }
         }
     }
 }

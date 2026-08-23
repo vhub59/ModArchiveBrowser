@@ -171,7 +171,7 @@ namespace ModArchiveBrowser
         public static string GetDownloadUrl(string modId) => GetModFacts(modId).DownloadUrl;
 
         /// <summary>Ce qu'une seule visite de la fiche permet d'apprendre.</summary>
-        public readonly record struct ModFacts(string DownloadUrl, bool IsAdult);
+        public readonly record struct ModFacts(string DownloadUrl, bool IsAdult, string ThumbUrl);
 
         /// <summary>
         /// Lien de telechargement et caractere adulte, en une seule visite.
@@ -190,7 +190,7 @@ namespace ModArchiveBrowser
             catch (Exception e)
             {
                 Log.Debug($"Could not read mod {modId}: {e.Message}");
-                return new ModFacts(string.Empty, false);
+                return new ModFacts(string.Empty, false, string.Empty);
             }
         }
 
@@ -212,7 +212,13 @@ namespace ModArchiveBrowser
             var adult = HtmlEntity.DeEntitize(type).TrimStart()
                 .StartsWith("NSFW", StringComparison.OrdinalIgnoreCase);
 
-            return new ModFacts(link, adult);
+            //La vignette vient de la meme page, donc sans requete supplementaire. Elle sert a la
+            //mise a jour automatique, qui n'a pour point de depart que l'identifiant du mod : sans
+            //elle, un mod mis a jour perdrait l'image que Penumbra affiche dans ses reglages.
+            var thumb = page.DocumentNode.SelectSingleNode("//img[contains(@class, 'mod-carousel-image')]")
+                ?.GetAttributeValue("src", string.Empty) ?? string.Empty;
+
+            return new ModFacts(link, adult, thumb);
         }
 
         /// <summary>Une entree de l'historique des versions d'un mod.</summary>

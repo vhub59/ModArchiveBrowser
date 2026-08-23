@@ -6,8 +6,13 @@ using System.Threading.Tasks;
 
 namespace ModArchiveBrowser.Utils
 {
-    /// <summary>Un mod installe pour lequel XMA propose une autre version.</summary>
-    public readonly record struct ModUpdate(string ModId, string Name, string InstalledVersion, string PublishedVersion);
+    /// <summary>
+    /// Un mod installe pour lequel XMA propose une autre version.
+    ///
+    /// Directory est le nom du dossier de Penumbra : c'est par lui, et non par le nom affiche,
+    /// que le mod se designe pour reporter ses reglages et le supprimer une fois remplace.
+    /// </summary>
+    public readonly record struct ModUpdate(string ModId, string Directory, string Name, string InstalledVersion, string PublishedVersion);
 
     /// <summary>
     /// Compare les mods installes a ce que XMA publie aujourd'hui.
@@ -83,6 +88,15 @@ namespace ModArchiveBrowser.Utils
 
         public void Cancel() => _cancellation?.Cancel();
 
+        /// <summary>
+        /// Retire un mod de la liste, une fois sa mise a jour appliquee.
+        ///
+        /// Sans cela il y resterait jusqu'a la verification suivante et paraitrait n'avoir pas ete
+        /// traite, alors qu'il vient de l'etre.
+        /// </summary>
+        public void Forget(string modId)
+            => Updates = Updates.Where(u => u.ModId != modId).ToList();
+
         private async Task RunAsync(CancellationToken token)
         {
             var installed = InstalledMods.Read(_plugin.penumbra.GetModDirectory())
@@ -104,7 +118,7 @@ namespace ModArchiveBrowser.Utils
                 Checked++;
 
                 if (!string.IsNullOrEmpty(published) && !SameVersion(mod.Version, published))
-                    found.Add(new ModUpdate(mod.XmaModId!, mod.Name, mod.Version, published));
+                    found.Add(new ModUpdate(mod.XmaModId!, mod.Directory, mod.Name, mod.Version, published));
 
                 //On remet la liste a jour au fil de l'eau plutot qu'a la fin : sur une grosse
                 //bibliotheque, l'utilisateur voit les resultats arriver au lieu d'attendre.

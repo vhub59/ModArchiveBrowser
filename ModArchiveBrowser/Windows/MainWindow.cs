@@ -205,13 +205,16 @@ public class MainWindow : Window, IDisposable
 
         NavBar.Context(NavBar.TitleOf(NavTarget.Updates), checker.Updates.Count);
 
+        var installer = plugin.updateInstaller;
+        var busy = checker.IsRunning || installer.IsRunning;
+
         var label = checker.IsRunning ? $"Checking {checker.Checked}/{checker.Total}" : "Check now";
         var buttonWidth = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
         ImGui.SameLine(ImGui.GetContentRegionMax().X - buttonWidth);
 
         //La verification lit les meta.json du dossier de mods de Penumbra : sans lui, il n'y a
         //rien a comparer et le bouton lancerait un parcours de zero mod.
-        using (ImRaii.Disabled(checker.IsRunning || !plugin.penumbra.Available))
+        using (ImRaii.Disabled(busy || !plugin.penumbra.Available))
         {
             if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.SyncAlt, label))
                 checker.Start();
@@ -237,8 +240,13 @@ public class MainWindow : Window, IDisposable
         if (checker.Updates.Count == 0)
         {
             ImGui.TextDisabled(checker.IsRunning ? "Checking..." : "Everything is up to date.");
+            DrawUpdateReport();
             return;
         }
+
+        DrawUpdateAll();
+        DrawUpdateReport();
+        ImGui.Separator();
 
         foreach (var update in checker.Updates)
         {
@@ -246,10 +254,18 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine();
             ImGui.TextDisabled($"·  {update.InstalledVersion}  →  {update.PublishedVersion}");
 
-            ImGui.SameLine(ImGui.GetContentRegionMax().X - 100f);
+            ImGui.SameLine(ImGui.GetContentRegionMax().X - 190f);
 
-            //Ouvrir la fiche plutot qu'installer d'ici : son bouton connait deja l'etat exact du
-            //mod, et l'utilisateur voit ce qu'il installe avant de le faire.
+            using (ImRaii.Disabled(installer.IsRunning))
+            {
+                //Le mod est remplace en place : reglages reportes, ancienne version supprimee.
+                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, $"Update##{update.ModId}"))
+                    installer.Start(new[] { update });
+            }
+
+            ImGui.SameLine();
+
+            //Ouvrir la fiche reste utile pour lire les notes de version avant de se decider.
             if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.ArrowRight, $"View##{update.ModId}"))
             {
                 try
@@ -264,6 +280,76 @@ public class MainWindow : Window, IDisposable
             }
 
             ImGui.Separator();
+        }
+    }
+
+    /// <summary>
+    /// Applique toutes les mises a jour d'un coup.
+    ///
+    /// Les detecter ne servait pas a grand-chose tant qu'il fallait ouvrir chaque fiche pour les
+    /// appliquer une par une. Le remplacement se fait en place — reglages reportes sur toutes les
+    /// collections, ancienne version supprimee — et non par empilement, qui est ce que produit
+    /// Penumbra quand on se contente de reinstaller.
+    /// </summary>
+    private void DrawUpdateAll()
+    {
+        var installer = plugin.updateInstaller;
+
+        if (installer.IsRunning)
+        {
+            ImGui.TextDisabled($"Updating {installer.Done + 1}/{installer.Total} · {installer.Current}");
+            ImGui.SameLine(ImGui.GetContentRegionMax().X - 90f);
+
+            if (ImGui.Button("Stop##updateall"))
+                installer.Cancel();
+
+            return;
+        }
+
+        using (Theme.Emphasis(Theme.Positive, Theme.PositiveHovered))
+        {
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download,
+                    $"Update all ({plugin.updateChecker.Updates.Count})"))
+                installer.Start(plugin.updateChecker.Updates);
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Replaces each mod in place: your settings and option choices are carried over,\n" +
+                "and the old version is removed.\n\n" +
+                "Mods hosted outside xivmodarchive cannot be updated from here and are listed below.");
+    }
+
+    /// <summary>
+    /// Ce que la mise a jour groupee n'a pas pu traiter.
+    ///
+    /// Un tiers du catalogue est heberge ailleurs : passer ces mods sous silence reviendrait a
+    /// laisser croire que tout a ete fait, et l'utilisateur ne s'en apercevrait que des mois plus
+    /// tard, devant un mod resté a une vieille version.
+    /// </summary>
+    private void DrawUpdateReport()
+    {
+        var installer = plugin.updateInstaller;
+
+        if (!installer.HasRun || installer.IsRunning)
+            return;
+
+        if (installer.Updated > 0)
+            ImGui.TextColored(Theme.Positive, installer.Updated == 1
+                ? "1 mod updated."
+                : $"{installer.Updated} mods updated.");
+
+        if (installer.Skipped.Count == 0)
+            return;
+
+        if (!ImGui.CollapsingHeader($"Could not be updated ({installer.Skipped.Count})"))
+            return;
+
+        foreach (var skipped in installer.Skipped)
+        {
+            ImGui.TextUnformatted(skipped.Name);
+            ImGui.SameLine();
+            ImGui.TextDisabled($"·  {skipped.Reason}");
         }
     }
 }

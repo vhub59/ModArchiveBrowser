@@ -174,7 +174,16 @@ namespace ModArchiveBrowser
             }
         }
 
-        public void InstallMod(string filePath,string imagepath)
+        /// <param name="replacing">
+        /// Vrai quand ce fichier vient remplacer un mod deja installe.
+        ///
+        /// Deux comportements changent alors. La garde anti-doublon est levee : elle compare les
+        /// noms, et une mise a jour porte souvent celui de la version qu'elle remplace — elle
+        /// bloquerait donc precisement ce qu'on cherche a faire, Penumbra recevant par ailleurs
+        /// l'ordre de substituer l'ancien. Et sa fenetre ne s'ouvre plus : sur un lot de vingt
+        /// mises a jour, elle se rappellerait au premier plan vingt fois.
+        /// </param>
+        public void InstallMod(string filePath, string imagepath, bool replacing = false)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             {
@@ -187,7 +196,7 @@ namespace ModArchiveBrowser
             //.ttmp2 or .pmp - Direct install
             if (extension == ".ttmp2" || extension == ".pmp")
             {
-                InstallSingle(filePath, imagepath);
+                InstallSingle(filePath, imagepath, replacing);
             }
             //Extract .ttmp2 and .pmp files, queue everything
             else if (extension == ".zip" || extension == ".rar" || extension == ".7z")
@@ -209,7 +218,7 @@ namespace ModArchiveBrowser
 
                 // Install each extracted mod file
                 foreach (var modFile in modFiles)
-                    InstallSingle(modFile, imagepath);
+                    InstallSingle(modFile, imagepath, replacing);
             }
             else
             {
@@ -224,11 +233,11 @@ namespace ModArchiveBrowser
         /// "(2)", "(3)"... Sans cette garde, réinstaller le même mod empilait les copies —
         /// trois dossiers de 95 Mo pour un seul mod, constaté en test.
         /// </summary>
-        private void InstallSingle(string modFile, string imagepath)
+        private void InstallSingle(string modFile, string imagepath, bool replacing = false)
         {
             var modName = Path.GetFileNameWithoutExtension(modFile);
 
-            if (plugin.penumbra.IsModInstalled(modName))
+            if (!replacing && plugin.penumbra.IsModInstalled(modName))
             {
                 Plugin.ReportError($"\"{modName}\" is already installed in Penumbra, skipping.", null);
                 plugin.penumbra.OpenModWindow();
@@ -238,15 +247,23 @@ namespace ModArchiveBrowser
             Plugin.Logger.Debug($"Installing mod: {modFile}");
             plugin.penumbra.InstallMod(modFile);
 
-            Plugin.Logger.Debug($"Saving thumbnail: {imagepath}");
-            File.Copy(imagepath, Path.Combine(_thumbnailDirectory, Path.GetFileName(imagepath)), true);
+            //La vignette peut manquer : une mise a jour part d'un identifiant de mod, et rien ne
+            //garantit que son image ait pu etre recuperee. File.Copy levait alors en pleine
+            //installation, sur ce qui n'est qu'un agrement d'affichage.
+            if (!string.IsNullOrEmpty(imagepath) && File.Exists(imagepath))
+            {
+                Plugin.Logger.Debug($"Saving thumbnail: {imagepath}");
+                File.Copy(imagepath, Path.Combine(_thumbnailDirectory, Path.GetFileName(imagepath)), true);
 
-            //Indexeur plutôt que Add : réinstaller un mod, ou traiter une archive portant
-            //plusieurs modpacks, aurait levé une ArgumentException.
-            _modNameToThumbnail[modName] = Path.Combine(_thumbnailDirectory, Path.GetFileName(imagepath));
+                //Indexeur plutôt que Add : réinstaller un mod, ou traiter une archive portant
+                //plusieurs modpacks, aurait levé une ArgumentException.
+                _modNameToThumbnail[modName] = Path.Combine(_thumbnailDirectory, Path.GetFileName(imagepath));
 
-            UpdateTextures();
-            plugin.penumbra.OpenModWindow();
+                UpdateTextures();
+            }
+
+            if (!replacing)
+                plugin.penumbra.OpenModWindow();
         }
 
         private List<string> ExtractModFiles(string archivePath)

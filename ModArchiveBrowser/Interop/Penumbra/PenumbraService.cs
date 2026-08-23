@@ -30,12 +30,19 @@ namespace ModArchiveBrowser.Interop.Penumbra
         private global::Penumbra.Api.IpcSubscribers.GetCollections? _getCollections;
         private global::Penumbra.Api.IpcSubscribers.GetCollection? _getCollection;
         private global::Penumbra.Api.IpcSubscribers.TrySetMod? _trySetMod;
+        private global::Penumbra.Api.IpcSubscribers.CopyModSettings? _copyModSettings;
+        private global::Penumbra.Api.IpcSubscribers.DeleteMod? _deleteMod;
         private EventSubscriber<string>? _modAdded;
         private EventSubscriber<string, float, float>? _preSettingsTabBarDraw;
 
         //Collection dans laquelle activer les mods qui vont arriver, et jusqu'a quand.
         private Guid? _pendingCollection;
         private DateTime _pendingUntil;
+
+        //Mod que le prochain installe vient remplacer. Consomme une seule fois, la ou l'activation
+        //en collection vaut pour toute la fenetre : une mise a jour designe un mod precis.
+        private string? _pendingReplace;
+        private DateTime _replaceUntil;
 
         private readonly IDisposable _initializedEvent;
         private readonly IDisposable _disposedEvent;
@@ -136,8 +143,92 @@ namespace ModArchiveBrowser.Interop.Penumbra
         /// <summary>Nom du dernier mod active par ce biais, pour que l'interface puisse le dire.</summary>
         public string? LastEnabled { get; private set; }
 
+        /// <summary>
+        /// Demande que le prochain mod installe prenne la place de celui-ci.
+        ///
+        /// Penumbra ne remplace jamais : un second appel a InstallMod cree un dossier "Mod (2)" et
+        /// laisse l'ancien actif. Une mise a jour naive empilerait donc les versions sans rien
+        /// mettre a jour du tout.
+        /// </summary>
+        public void ReplaceComingInstall(string oldDirectory)
+        {
+            _pendingReplace = oldDirectory;
+            _replaceUntil = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+        }
+
+        /// <summary>
+        /// Vrai tant qu'un remplacement attend le mod qui doit le declencher.
+        ///
+        /// Une mise a jour groupee doit les enchainer un par un : l'attente ne designe qu'un seul
+        /// ancien mod, et lancer la suivante avant que ModAdded n'ait livre la precedente ferait
+        /// supprimer le mauvais mod.
+        /// </summary>
+        public bool ReplacementPending => _pendingReplace != null;
+
+        /// <summary>Abandonne le remplacement en attente, quand le mod n'est jamais arrive.</summary>
+        public void CancelComingReplacement() => _pendingReplace = null;
+
+        /// <summary>Dernier remplacement abouti : ancien dossier vers nouveau.</summary>
+        public (string From, string To)? LastReplacement { get; private set; }
+
+        /// <summary>
+        /// Reporte les reglages de l'ancien mod sur le nouveau, puis supprime l'ancien.
+        ///
+        /// CopyModSettings avec une collection nulle couvre toutes les collections d'un coup :
+        /// etat active, priorite et choix d'options suivent donc partout. Penumbra corrige au
+        /// passage les reglages devenus caducs, ce qui compte ici — entre deux versions, un auteur
+        /// renomme ou retire des groupes d'options.
+        ///
+        /// L'ancien n'est supprime que si la copie a reussi. Sans cette garde, une copie ratee
+        /// laisserait l'utilisateur avec un mod neuf sans reglages et plus rien pour les
+        /// retrouver — la suppression, elle, est irreversible.
+        /// </summary>
+        private void Replace(string oldDirectory, string newDirectory)
+        {
+            try
+            {
+                var copied = _copyModSettings!.Invoke(null, oldDirectory, newDirectory);
+                if (copied != PenumbraApiEc.Success)
+                {
+                    Plugin.Logger.Warning(
+                        $"Could not carry settings from \"{oldDirectory}\" to \"{newDirectory}\" ({copied}); keeping both versions.");
+                    return;
+                }
+
+                var deleted = _deleteMod!.Invoke(oldDirectory, string.Empty);
+                if (deleted != PenumbraApiEc.Success)
+                {
+                    Plugin.Logger.Warning($"Settings were carried over, but \"{oldDirectory}\" could not be removed ({deleted}).");
+                    return;
+                }
+
+                LastReplacement = (oldDirectory, newDirectory);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.Debug($"Could not replace \"{oldDirectory}\":\n{ex}");
+            }
+        }
+
         private void OnModAdded(string modDirectory)
         {
+            if (_pendingReplace is { } old)
+            {
+                var expired = DateTime.UtcNow > _replaceUntil;
+                _pendingReplace = null;
+
+                if (!expired)
+                {
+                    Replace(old, modDirectory);
+
+                    //On s'arrete la. L'activation en collection forcerait ce mod a l'etat actif,
+                    //alors que la copie des reglages vient justement de reproduire celui de la
+                    //version precedente : un mod volontairement desactive se rallumerait a chaque
+                    //mise a jour.
+                    return;
+                }
+            }
+
             if (_pendingCollection is not { } collection)
                 return;
 
@@ -353,6 +444,8 @@ namespace ModArchiveBrowser.Interop.Penumbra
                 _getCollections = new global::Penumbra.Api.IpcSubscribers.GetCollections(_pluginInterface);
                 _getCollection = new global::Penumbra.Api.IpcSubscribers.GetCollection(_pluginInterface);
                 _trySetMod = new global::Penumbra.Api.IpcSubscribers.TrySetMod(_pluginInterface);
+                _copyModSettings = new global::Penumbra.Api.IpcSubscribers.CopyModSettings(_pluginInterface);
+                _deleteMod = new global::Penumbra.Api.IpcSubscribers.DeleteMod(_pluginInterface);
 
                 //Seul moyen d'apprendre le nom du dossier d'un mod qu'on vient de faire installer :
                 //InstallMod se contente de le mettre en file et ne rend rien.
@@ -380,13 +473,17 @@ namespace ModArchiveBrowser.Interop.Penumbra
                 _getCollections = null;
                 _getCollection = null;
                 _trySetMod = null;
+                _copyModSettings = null;
+                _deleteMod = null;
 
                 _modAdded?.Dispose();
                 _modAdded = null;
 
                 //Une attente survivant au detachement s'appliquerait a la reconnexion suivante,
-                //bien apres l'installation qui l'avait armee.
+                //bien apres l'installation qui l'avait armee. Celle du remplacement plus encore :
+                //elle supprimerait un mod sans rapport.
                 _pendingCollection = null;
+                _pendingReplace = null;
 
                 Available = false;
                 //_preSettingsTabBarDraw?.Dispose();
