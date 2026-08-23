@@ -8,6 +8,8 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using System.Net.Http;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Components;
 using HtmlAgilityPack;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
@@ -74,6 +76,9 @@ public class MainWindow : Window, IDisposable
     /// <summary>Vue affichée par la fenêtre. Les onglets la changent sur place.</summary>
     public NavTarget CurrentTarget { get; set; } = NavTarget.Home;
 
+    /// <summary>Vrai quand on consulte la fiche d'un mod plutot que la grille.</summary>
+    public bool ShowingMod { get; set; }
+
     private void DrawHomePageTable()
     {
         NavBar.Context(NavBar.TitleOf(NavTarget.Home), modThumbs?.Count ?? 0);
@@ -128,12 +133,7 @@ public class MainWindow : Window, IDisposable
                 try
                 {
                     plugin.modWindow.ChangeMod(thumb);
-                    if (!plugin.modWindow.IsOpen)
-                    {
-                        plugin.modWindow.Toggle();
-                    }
-
-                    plugin.modWindow.BringToFront();
+                    ShowingMod = true;
                 }
                 catch (Exception e)
                 {
@@ -148,14 +148,40 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    /// <summary>
+    /// Fiche d'un mod, avec le chemin parcouru pour y revenir.
+    ///
+    /// Le retour est explicite plutot que confie a la croix de fermeture : la grille reste la
+    /// destination naturelle, et on ne quitte pas le plugin en consultant un mod.
+    /// </summary>
+    private void DrawModDetail()
+    {
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.ArrowLeft, "Back"))
+            ShowingMod = false;
+
+        ImGui.SameLine();
+        ImGui.TextDisabled($"·  {NavBar.TitleOf(CurrentTarget)}  ·");
+        ImGui.SameLine();
+        ImGui.TextUnformatted(plugin.modWindow.CurrentModName);
+
+        ImGui.Separator();
+        plugin.modWindow.DrawEmbedded();
+    }
+
     public override void Draw()
     {
         //Le theme est applique ici, autour de tout le contenu : chaque widget dessine en dessous
         //en herite, sans avoir a le repeter.
         using var theme = Theme.Scope();
 
-        //Une seule fenetre pour toutes les vues. La barre change le contenu sur place au lieu
-        //de fermer une fenetre pour en ouvrir une autre, d'aspect identique et sans transition.
+        //Une seule fenetre pour toutes les vues, fiche de mod comprise. La barre change le
+        //contenu sur place au lieu d'ouvrir des fenetres qui se recouvrent.
+        if (ShowingMod && plugin.modWindow.HasMod)
+        {
+            DrawModDetail();
+            return;
+        }
+
         NavBar.Draw(plugin, CurrentTarget);
         ImGui.Separator();
 

@@ -120,22 +120,29 @@ public sealed class Plugin : IDalamudPlugin
         switch(command)
         {
             case "/archive":
+                //On revient toujours sur la grille : rester sur une fiche consultee il y a une
+                //heure serait deroutant.
                 MainWindow.CurrentTarget = Utils.NavTarget.Home;
+                MainWindow.ShowingMod = false;
                 MainWindow.Toggle();
                 break;
             //La recherche n'a plus sa propre fenetre : la commande ouvre la fenetre principale
             //sur l'onglet correspondant.
             case "/modsearch":
                 MainWindow.CurrentTarget = Utils.NavTarget.Search;
+                MainWindow.ShowingMod = false;
                 MainWindow.IsOpen = true;
                 MainWindow.BringToFront();
                 break;
             case "/archiveconfig":ConfigWindow.Toggle();break;
+            //La fiche n'a plus sa propre fenetre : la commande ouvre la fenetre principale
+            //directement sur le mod demande.
             case "/modid": if (!args.IsNullOrEmpty())
                 {
                     modWindow.ChangeMod(args);
-                    modWindow.IsOpen = true;
-                    modWindow.BringToFront();
+                    MainWindow.ShowingMod = true;
+                    MainWindow.IsOpen = true;
+                    MainWindow.BringToFront();
                 }
                 else
                 {

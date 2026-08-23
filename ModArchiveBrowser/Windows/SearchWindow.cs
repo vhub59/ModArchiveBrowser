@@ -438,12 +438,7 @@ namespace ModArchiveBrowser.Windows
                     try
                     {
                         plugin.modWindow.ChangeMod(thumb);
-                        if (!plugin.modWindow.IsOpen)
-                        {
-                            plugin.modWindow.Toggle();
-                        }
-
-                        plugin.modWindow.BringToFront();
+                        plugin.MainWindow.ShowingMod = true;
                     }
                     catch (Exception e)
                     {

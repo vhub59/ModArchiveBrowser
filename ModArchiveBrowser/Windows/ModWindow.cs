@@ -531,18 +531,34 @@ namespace ModArchiveBrowser.Windows
                 ImGui.EndChild();
             }
         }
+        /// <summary>Un mod est-il charge et pret a etre affiche ?</summary>
+        public bool HasMod => mod is not null;
+
+        /// <summary>Nom du mod affiche, pour le fil d'Ariane de la fenetre principale.</summary>
+        public string CurrentModName => mod?.modThumb.name ?? string.Empty;
+
+        /// <summary>
+        /// Dessine la fiche a l'interieur de la fenetre principale.
+        ///
+        /// Ouvrir une fenetre separee pour chaque mod obligeait a la deplacer, la redimensionner
+        /// puis la fermer, et elle recouvrait la grille dont on venait. Une fiche produit se
+        /// consulte a la place du catalogue, pas par-dessus.
+        /// </summary>
+        public void DrawEmbedded()
+        {
+            if (mod is not null)
+                DrawModPage();
+            else
+                ImGui.TextDisabled("No mod selected.");
+        }
+
+        /// <summary>
+        /// Jamais appelee : la fiche n'a plus sa propre fenetre, son contenu est dessine par la
+        /// fenetre principale. La classe reste un Window pour ne pas defaire le systeme de
+        /// fenetres du plugin.
+        /// </summary>
         public override void Draw()
         {
-           if(mod is not null)
-            {
-                DrawModPage();
-            }
-            else
-            {
-                ImGui.Text("No mod selected,use the main window to browse some mods");
-            }
-           
-
         }
     }
 }
