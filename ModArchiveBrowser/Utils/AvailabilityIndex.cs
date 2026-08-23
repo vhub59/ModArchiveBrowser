@@ -22,6 +22,13 @@ namespace ModArchiveBrowser.Utils
 
         /// <summary>Hébergé par XMA dans un format que Penumbra ne sait pas lire.</summary>
         Unsupported = 4,
+
+        /// <summary>
+        /// Heberge par Heliosphere, une autre plateforme de mods dotee de son propre plugin
+        /// Dalamud. Le fichier n'est pas telechargeable d'ici, mais le mod reste installable en
+        /// un clic depuis leur site : ce n'est pas un cul-de-sac comme Mega ou Drive.
+        /// </summary>
+        Heliosphere = 5,
     }
 
     /// <summary>
@@ -90,7 +97,11 @@ namespace ModArchiveBrowser.Utils
             //"/private/" est la marque des fichiers servis par XMA ; tout le reste pointe vers un
             //hebergeur tiers, que le plugin ne peut pas telecharger.
             if (!downloadUrl.Contains("private"))
-                return ModAvailability.External;
+            {
+                return downloadUrl.Contains("heliosphere.app", StringComparison.OrdinalIgnoreCase)
+                    ? ModAvailability.Heliosphere
+                    : ModAvailability.External;
+            }
 
             string extension;
             try
@@ -117,6 +128,7 @@ namespace ModArchiveBrowser.Utils
             ModAvailability.Installable => "Installs into Penumbra in one click.",
             ModAvailability.Archive => "Archive: may only hold the author's source files.",
             ModAvailability.External => "Hosted outside xivmodarchive: cannot be installed from here.",
+            ModAvailability.Heliosphere => "Published on Heliosphere: install it from there in one click.",
             ModAvailability.Unsupported => "Penumbra cannot use this file type.",
             _ => string.Empty,
         };

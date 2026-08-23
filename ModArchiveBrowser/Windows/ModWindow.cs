@@ -81,6 +81,15 @@ namespace ModArchiveBrowser.Windows
         private bool HostedByXma =>
             mod.HasValue && mod.Value.url_download_button.Contains("private");
 
+        /// <summary>
+        /// Vrai si le mod est publie sur Heliosphere.
+        ///
+        /// A distinguer d'un hebergement de fichiers ordinaire : Heliosphere est une plateforme
+        /// de mods avec son propre plugin Dalamud, qui installe dans Penumbra comme celui-ci.
+        /// </summary>
+        private bool PublishedOnHeliosphere =>
+            mod.HasValue && mod.Value.url_download_button.Contains("heliosphere.app", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>Extension du fichier propose au telechargement, en minuscules (".pmp", ".zip"...).</summary>
         private string DownloadExtension()
         {
@@ -416,6 +425,21 @@ namespace ModArchiveBrowser.Windows
 
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip($"Penumbra already has \"{_installedMatch?.Name}\" in version {_installedMatch?.Version}.");
+                }
+                else if (PublishedOnHeliosphere)
+                {
+                    //Heliosphere est une plateforme de mods, pas un simple hebergeur de fichiers :
+                    //son plugin Dalamud installe dans Penumbra en un clic, comme celui-ci. Le mod
+                    //n'est donc pas hors de portee, il passe par un autre chemin.
+                    //
+                    //Leur plugin n'expose aucune IPC — il ne fait que consommer celle de Penumbra —
+                    //on ne peut donc pas lui passer la main directement. Ouvrir leur page suffit :
+                    //le bouton d'installation de leur site s'en charge.
+                    if (ImGui.Button("Open in Heliosphere"))
+                        Process.Start(new ProcessStartInfo(mod.Value.url_download_button) { UseShellExecute = true });
+
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Published on Heliosphere, another mod platform.\nIts own plugin installs into Penumbra in one click.");
                 }
                 else if (!HostedByXma)
                 {

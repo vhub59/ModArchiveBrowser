@@ -140,6 +140,7 @@ namespace ModArchiveBrowser.Utils
                 ModAvailability.Installable => 0xFF4CAF50u, // vert
                 ModAvailability.Archive => 0xFF3BA5EBu,     // ambre
                 ModAvailability.External => 0xFF6B6B6Bu,    // gris
+                ModAvailability.Heliosphere => 0xFFD9822Bu, // bleu : autre plateforme, pas un cul-de-sac
                 _ => 0xFF4C4CE0u,                            // rouge
             };
 
