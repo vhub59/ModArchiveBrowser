@@ -129,7 +129,8 @@ public class MainWindow : Window, IDisposable
 
             var availability = AvailabilityIndex.Get(plugin.Configuration, thumb.url);
 
-            if (ModGrid.Draw($"##homecard{i}", thumb, texture, cardWidth, availability))
+            if (ModGrid.Draw($"##homecard{i}", thumb, texture, cardWidth, availability,
+                obscure: plugin.Configuration.BlurAdultThumbnails && AvailabilityIndex.IsAdult(plugin.Configuration, thumb.url)))
             {
                 try
                 {

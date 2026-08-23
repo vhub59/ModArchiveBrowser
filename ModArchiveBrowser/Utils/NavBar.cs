@@ -97,9 +97,9 @@ namespace ModArchiveBrowser.Utils
         /// fermee et le cache HTML purge, si bien que XMA repond 403 sur ces pages. Le filtrage
         /// tient cote serveur, pas cote affichage.
         ///
-        /// Le libelle dit "Adult only" et non "Adult", car le filtre de XMA est exclusif : il
-        /// remplace les resultats au lieu de les completer. Mesure faite sur le tag bibo+, 3391
-        /// resultats sans le parametre contre 1281 avec, sans recouvrement.
+        /// Activer melange les mods adultes aux autres plutot que de les isoler : omettre le
+        /// parametre nsfw fait renvoyer a XMA les deux ensembles reunis. Verifie sur le tag bibo+,
+        /// 3 391 sans adultes et 1 282 adultes seuls, pour 4 673 sans le parametre.
         /// </summary>
         private static void DrawAdultToggle(Plugin plugin, NavTarget current)
         {
@@ -110,7 +110,7 @@ namespace ModArchiveBrowser.Utils
             //laisser sans effet, ce qui donnerait l'impression qu'elle est cassee.
             var applicable = current != NavTarget.Home;
             var icon = enabled ? FontAwesomeIcon.Eye : FontAwesomeIcon.EyeSlash;
-            var label = enabled ? "Adult only" : "Adult off";
+            var label = enabled ? "Adult shown" : "Adult off";
 
             var width = ImGui.CalcTextSize(label).X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 3f;
             ImGui.SameLine(ImGui.GetContentRegionMax().X - width);

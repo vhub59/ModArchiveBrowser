@@ -111,7 +111,11 @@ namespace ModArchiveBrowser.Utils
     public enum NSFW
     {
         True,
-        False
+        False,
+        //Parametre omis : XMA renvoie alors les mods adultes melanges aux autres. Le filtre
+        //n'est donc pas exclusif, contrairement a ce que laissait croire son comportement avec
+        //une valeur explicite.
+        Both,
     }
 
     public enum DTCompatibility

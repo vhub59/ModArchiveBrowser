@@ -56,9 +56,13 @@ namespace ModArchiveBrowser.Utils
                 .Push(ImGuiCol.FrameBgActive, new Vector4(0.21f, 0.24f, 0.29f, 1f))
                 .Push(ImGuiCol.Border, new Vector4(0.26f, 0.28f, 0.32f, 0.7f))
                 .Push(ImGuiCol.ChildBg, new Vector4(0.10f, 0.11f, 0.13f, 0.55f))
-                .Push(ImGuiCol.Header, AccentActive)
-                .Push(ImGuiCol.HeaderHovered, AccentHovered)
-                .Push(ImGuiCol.HeaderActive, Accent)
+                //ImGuiCol.Header sert de fond aux CollapsingHeader et aux Selectable. Lui donner
+                //la couleur d'accent transformait "Advanced Search Options" en un bandeau bleu
+                //plein qui ecrasait tout le panneau. L'accent est reserve au survol, ou il
+                //signale quelque chose ; au repos, un gris a peine plus clair que le fond suffit.
+                .Push(ImGuiCol.Header, new Vector4(0.20f, 0.21f, 0.25f, 1f))
+                .Push(ImGuiCol.HeaderHovered, new Vector4(0.26f, 0.29f, 0.35f, 1f))
+                .Push(ImGuiCol.HeaderActive, AccentActive)
                 .Push(ImGuiCol.CheckMark, AccentHovered)
                 .Push(ImGuiCol.Separator, new Vector4(0.24f, 0.26f, 0.30f, 0.6f));
 

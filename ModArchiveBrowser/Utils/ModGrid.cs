@@ -62,7 +62,8 @@ namespace ModArchiveBrowser.Utils
         }
 
         public static bool Draw(string id, ModThumb thumb, IDalamudTextureWrap? texture, float width,
-                                ModAvailability availability = ModAvailability.Unknown)
+                                ModAvailability availability = ModAvailability.Unknown,
+                                bool obscure = false)
         {
             var style = ImGui.GetStyle();
             var pad = style.FramePadding;
@@ -85,7 +86,8 @@ namespace ModArchiveBrowser.Utils
 
             DrawShadow(draw, top, bottom, lift);
             draw.AddRectFilled(top, bottom, Blend(0xFF1A1C20u, 0xFF23262Cu, lift), Rounding);
-            DrawThumbnail(draw, texture, top, width, imageHeight);
+            //Le survol revele : c'est un geste deliberé, contrairement au simple defilement.
+            DrawThumbnail(draw, texture, top, width, imageHeight, obscure && lift < 0.9f);
             DrawScrim(draw, top, width, imageHeight);
             DrawTitle(draw, thumb, top, width, imageHeight, pad);
             DrawBadge(draw, availability, top, width);
@@ -138,7 +140,7 @@ namespace ModArchiveBrowser.Utils
             }
         }
 
-        private static void DrawThumbnail(ImDrawListPtr draw, IDalamudTextureWrap? texture, Vector2 top, float width, float imageHeight)
+        private static void DrawThumbnail(ImDrawListPtr draw, IDalamudTextureWrap? texture, Vector2 top, float width, float imageHeight, bool obscure = false)
         {
             var imageEnd = top + new Vector2(width, imageHeight);
 
@@ -165,7 +167,47 @@ namespace ModArchiveBrowser.Utils
             var uv0 = new Vector2((1f - uvWidth) / 2f, (1f - uvHeight) / 2f);
             var uv1 = uv0 + new Vector2(uvWidth, uvHeight);
 
+            if (obscure)
+            {
+                DrawObscured(draw, texture, top, imageEnd, uv0, uv1, width, imageHeight);
+                return;
+            }
+
             draw.AddImageRounded(texture.Handle, top, imageEnd, uv0, uv1, 0xFFFFFFFFu, Rounding, ImDrawFlags.RoundCornersTop);
+        }
+
+        /// <summary>
+        /// Vignette rendue illisible sans etre cachee.
+        ///
+        /// ImGui n'offre pas de flou : il n'y a ni shader accessible depuis la liste de dessin,
+        /// ni cible de rendu intermediaire. On l'approche en superposant la meme image plusieurs
+        /// fois, decalee et transparente — un etalement qui brouille les contours — puis en
+        /// assombrissant l'ensemble. Le resultat n'est pas un flou gaussien, mais il remplit le
+        /// meme office : on devine une image sans en distinguer le contenu.
+        /// </summary>
+        private static void DrawObscured(ImDrawListPtr draw, IDalamudTextureWrap texture,
+                                         Vector2 top, Vector2 end, Vector2 uv0, Vector2 uv1,
+                                         float width, float imageHeight)
+        {
+            var spread = MathF.Max(6f, width * 0.03f);
+            var offsets = new[]
+            {
+                new Vector2(-spread, -spread), new Vector2(0f, -spread), new Vector2(spread, -spread),
+                new Vector2(-spread, 0f),      Vector2.Zero,            new Vector2(spread, 0f),
+                new Vector2(-spread, spread),  new Vector2(0f, spread), new Vector2(spread, spread),
+            };
+
+            //Chaque copie ne porte qu'une fraction de l'opacite : leur somme reconstitue une image
+            //complete, mais etalee.
+            const uint sample = 0x30FFFFFFu;
+            foreach (var offset in offsets)
+                draw.AddImageRounded(texture.Handle, top + offset, end + offset, uv0, uv1, sample, Rounding, ImDrawFlags.RoundCornersTop);
+
+            draw.AddRectFilled(top, end, 0x99000000u, Rounding, ImDrawFlags.RoundCornersTop);
+
+            const string label = "Adult content";
+            var size = ImGui.CalcTextSize(label);
+            draw.AddText(top + new Vector2((width - size.X) / 2f, (imageHeight - size.Y) / 2f), 0xCCFFFFFFu, label);
         }
 
         /// <summary>

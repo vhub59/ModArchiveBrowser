@@ -124,18 +124,40 @@ namespace ModArchiveBrowser
         /// s'arrete a ce seul lien — et le cache HTML fait que l'ouverture ulterieure de la fiche
         /// ne coutera rien.
         /// </summary>
-        public static string GetDownloadUrl(string modId)
+        public static string GetDownloadUrl(string modId) => GetModFacts(modId).DownloadUrl;
+
+        /// <summary>Ce qu'une seule visite de la fiche permet d'apprendre.</summary>
+        public readonly record struct ModFacts(string DownloadUrl, bool IsAdult);
+
+        /// <summary>
+        /// Lien de telechargement et caractere adulte, en une seule visite.
+        ///
+        /// Les resultats de recherche ne marquent pas les mods adultes : une liste mixte ne
+        /// permet pas de les distinguer. La fiche, elle, prefixe son champ type — "NSFW Body by
+        /// Aleks" contre "Skin by KonekoMods". Comme le prechargement ouvre deja cette page pour
+        /// le lien de telechargement, l'information ne coute rien de plus.
+        /// </summary>
+        public static ModFacts GetModFacts(string modId)
         {
             try
             {
                 var page = ClientInstance.Load($"{xivmodarchiveRoot}/modid/{modId}");
-                var node = page.DocumentNode.SelectSingleNode("//a[@id='mod-download-link']");
-                return node?.GetAttributeValue("href", string.Empty) ?? string.Empty;
+
+                var link = page.DocumentNode.SelectSingleNode("//a[@id='mod-download-link']")
+                    ?.GetAttributeValue("href", string.Empty) ?? string.Empty;
+
+                var type = page.DocumentNode.SelectSingleNode("//div[contains(@class, 'col-8')]//p[contains(@class, 'lead')]")
+                    ?.InnerText ?? string.Empty;
+
+                var adult = HtmlEntity.DeEntitize(type).TrimStart()
+                    .StartsWith("NSFW", StringComparison.OrdinalIgnoreCase);
+
+                return new ModFacts(link, adult);
             }
             catch (Exception e)
             {
-                Plugin.Logger.Debug($"Could not read the download link of mod {modId}: {e.Message}");
-                return string.Empty;
+                Plugin.Logger.Debug($"Could not read mod {modId}: {e.Message}");
+                return new ModFacts(string.Empty, false);
             }
         }
 
@@ -480,7 +502,10 @@ namespace ModArchiveBrowser
             // Required Parameters
             queryParams["sortby"] = sortBy.ToString().ToLower();
             queryParams["sortorder"] = sortOrder.ToString().ToLower();
-            queryParams["nsfw"] = nsfw == NSFW.True ? "true" : "false";
+            //NSFW.Both omet le parametre : XMA renvoie alors les deux ensembles reunis.
+            //Verifie : 52 114 sans adultes, 8 413 adultes seuls, 60 527 sans le parametre.
+            if (nsfw != NSFW.Both)
+                queryParams["nsfw"] = nsfw == NSFW.True ? "true" : "false";
             queryParams["dt_compat"] = ((int)dtCompatibility).ToString();
             //14 897 mods sur 52 114 : un vrai filtre, qui n'etait accessible que par l'onglet
             //Sponsored et ne pouvait donc pas se combiner a une recherche.

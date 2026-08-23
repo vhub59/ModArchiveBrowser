@@ -73,11 +73,14 @@ namespace ModArchiveBrowser.Utils
                     {
                         token.ThrowIfCancellationRequested();
 
+                        var facts = WebClient.GetModFacts(id!);
+
                         if (AvailabilityIndex.Record(
                                 _plugin.Configuration,
                                 $"/modid/{id}",
-                                WebClient.GetDownloadUrl(id!),
-                                save: false))
+                                facts.DownloadUrl,
+                                save: false,
+                                adult: facts.IsAdult))
                             learned = true;
 
                         Pending--;

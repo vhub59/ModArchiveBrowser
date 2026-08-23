@@ -126,6 +126,18 @@ public class ConfigWindow : Window, IDisposable
                 "Off by default. While off, xivmodarchive returns 403 for adult mods,\n" +
                 "so they cannot be browsed or installed at all.");
         }
+        var blur = Configuration.BlurAdultThumbnails;
+        if (ImGui.Checkbox("Obscure adult thumbnails", ref blur))
+        {
+            Configuration.BlurAdultThumbnails = blur;
+            Configuration.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Adult mods stay in the results, but their preview is smeared over\nuntil you hover the card.");
+
+        ImGui.Separator();
+
         var cacheSize = Configuration.CacheSize;
         var thumbnailsPath = Configuration.ThumbnailsFolder;
         if ( ImGui.InputText("Thumbnails folder",ref thumbnailsPath,300))

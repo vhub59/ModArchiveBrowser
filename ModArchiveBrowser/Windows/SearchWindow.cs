@@ -131,7 +131,12 @@ namespace ModArchiveBrowser.Windows
                 RunSearch(1);
             }
 
-            if (ImGui.BeginChild("searchresults", new Vector2(0, 0), false))
+            //On reserve la hauteur de la barre de pagination : elle vivait dans la zone defilante,
+            //a la suite des cartes, si bien que changer de page obligeait a derouler toute la
+            //grille pour l'atteindre.
+            var footer = ImGui.GetFrameHeightWithSpacing() + ImGui.GetStyle().ItemSpacing.Y * 2f;
+
+            if (ImGui.BeginChild("searchresults", new Vector2(0, -footer), false))
             {
                 if (modThumbs != null && modThumbs.Count > 0 && searchTask is { Status: TaskStatus.RanToCompletion })
                 {
@@ -147,18 +152,22 @@ namespace ModArchiveBrowser.Windows
                 }
             }
             ImGui.EndChild();
+
+            if (modThumbs is { Count: > 0 })
+                DrawPagination();
         }
 
         /// <summary>
         /// Applique la bascule du contenu adulte et recharge la vue.
         ///
-        /// Le filtre de XMA etant exclusif, activer ne complete pas la liste : il la remplace par
-        /// les seuls mods adultes. Le rechargement est donc indispensable, l'ancienne liste
-        /// n'ayant plus rien a voir avec la nouvelle.
+        /// Activer bascule en mode mixte, pas en mode exclusif : omettre le parametre nsfw fait
+        /// renvoyer a XMA les deux ensembles reunis. J'avais d'abord conclu l'inverse, en ne
+        /// comparant que les valeurs explicites — 52 114 sans adultes, 8 413 adultes seuls, mais
+        /// 60 527 sans le parametre. Le filtre n'est exclusif que si on le renseigne.
         /// </summary>
         public void ApplyAdultMode(bool enabled)
         {
-            selectedNSFW = enabled ? NSFW.True : NSFW.False;
+            selectedNSFW = enabled ? NSFW.Both : NSFW.False;
 
             //Rien a recharger tant qu'aucune recherche n'a eu lieu.
             if (searchTask != null || presetUrl != null)
@@ -416,9 +425,13 @@ namespace ModArchiveBrowser.Windows
             //"Adult mods only" et non "NSFW" : le filtre de XMA est exclusif, pas additif. Mesure
             //faite sur le tag bibo+ : 3391 resultats sans le parametre, 1281 avec nsfw=true, sans
             //recouvrement. Cocher ne complete pas la liste, il la remplace.
+            //Trois choix et non deux : XMA sait melanger, il suffit d'omettre le parametre.
+            string[] modes = { "Mixed in", "Only adult", "Hidden" };
+            var index = selectedNSFW switch { NSFW.Both => 0, NSFW.True => 1, _ => 2 };
+
             ImGui.BeginDisabled(!nsfwAllowed);
-            if (ImGui.Checkbox("Adult mods only", ref nsfwSelected))
-                selectedNSFW = nsfwSelected ? NSFW.True : NSFW.False;
+            if (LabeledCombo("Adult", ref index, modes))
+                selectedNSFW = index switch { 0 => NSFW.Both, 1 => NSFW.True, _ => NSFW.False };
             ImGui.EndDisabled();
 
             if (ImGui.IsItemHovered())
@@ -474,7 +487,8 @@ namespace ModArchiveBrowser.Windows
 
                 var availability = AvailabilityIndex.Get(plugin.Configuration, thumb.url);
 
-                if (ModGrid.Draw($"##searchcard{i}", thumb, texture, cardWidth, availability))
+                if (ModGrid.Draw($"##searchcard{i}", thumb, texture, cardWidth, availability,
+                obscure: plugin.Configuration.BlurAdultThumbnails && AvailabilityIndex.IsAdult(plugin.Configuration, thumb.url)))
                 {
                     try
                     {
@@ -493,10 +507,19 @@ namespace ModArchiveBrowser.Windows
                 }
             }
 
-            ImGui.Spacing();
-            ImGui.Separator();
-            //Pagination par blocs : une page d'affichage vaut plusieurs pages du site.
-            ImGui.Spacing();
+        }
+
+        /// <summary>
+        /// Barre de pagination, epinglee au bas de la vue.
+        ///
+        /// Elle vivait a l'interieur de la zone defilante, a la suite des cartes : changer de page
+        /// obligeait donc a derouler toute la grille pour l'atteindre. Elle est desormais dessinee
+        /// hors de cette zone, a laquelle on reserve la hauteur correspondante.
+        ///
+        /// Une page d'affichage vaut plusieurs pages du site, XMA n'en servant que quinze.
+        /// </summary>
+        public void DrawPagination()
+        {
             ImGui.Separator();
 
             var loading = searchTask is { IsCompleted: false };

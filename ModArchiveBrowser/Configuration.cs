@@ -39,6 +39,22 @@ public class Configuration : IPluginConfiguration
     /// </summary>
     public Dictionary<string, int> KnownAvailability { get; set; } = new Dictionary<string, int>();
 
+    /// <summary>
+    /// Mods reconnus comme adultes, appris en meme temps que leur installabilite.
+    ///
+    /// Les resultats de recherche ne les marquent pas ; seule la fiche prefixe son champ type.
+    /// Le prechargement ouvrant deja cette page, l'information ne coute aucune requete de plus.
+    /// </summary>
+    public HashSet<string> KnownAdult { get; set; } = new HashSet<string>();
+
+    /// <summary>
+    /// Masque les vignettes des mods adultes au lieu de les cacher entierement.
+    ///
+    /// Permet de parcourir tout le catalogue d'un seul tenant sans qu'une image explicite
+    /// s'affiche a l'improviste. Survoler une carte la revele.
+    /// </summary>
+    public bool BlurAdultThumbnails { get; set; } = true;
+
     // the below exist just to make saving less cumbersome
     public void Save()
     {

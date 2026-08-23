@@ -76,25 +76,47 @@ namespace ModArchiveBrowser.Utils
         /// Faux pendant un prechargement : trente cartes signifieraient trente ecritures de la
         /// configuration sur disque. L'appelant sauvegarde une fois, a la fin.
         /// </param>
-        public static bool Record(Configuration config, string? relativeUrl, string? downloadUrl, bool save = true)
+        /// <summary>Vrai si ce mod est connu comme adulte.</summary>
+        public static bool IsAdult(Configuration config, string? relativeUrl)
+        {
+            var id = ModIdFromUrl(relativeUrl);
+            return id != null && config.KnownAdult.Contains(id);
+        }
+
+        public static bool Record(Configuration config, string? relativeUrl, string? downloadUrl, bool save = true, bool? adult = null)
         {
             var id = ModIdFromUrl(relativeUrl);
             if (id == null)
                 return false;
 
+            var changed = false;
+
+            //Le marqueur adulte est retenu meme quand l'installabilite reste inconnue : les deux
+            //viennent de la meme visite, autant garder ce qu'on a appris.
+            if (adult.HasValue)
+            {
+                changed = adult.Value ? config.KnownAdult.Add(id) : config.KnownAdult.Remove(id);
+            }
+
             var availability = Classify(downloadUrl);
             if (availability == ModAvailability.Unknown)
-                return false;
+            {
+                if (changed && save)
+                    config.Save();
 
-            if (config.KnownAvailability.TryGetValue(id, out var existing) && existing == (int)availability)
-                return false;
+                return changed;
+            }
 
-            config.KnownAvailability[id] = (int)availability;
+            if (!config.KnownAvailability.TryGetValue(id, out var existing) || existing != (int)availability)
+            {
+                config.KnownAvailability[id] = (int)availability;
+                changed = true;
+            }
 
-            if (save)
+            if (changed && save)
                 config.Save();
 
-            return true;
+            return changed;
         }
 
         private static ModAvailability Classify(string? downloadUrl)
