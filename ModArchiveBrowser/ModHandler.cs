@@ -97,22 +97,27 @@ namespace ModArchiveBrowser
             try
             {
                 modUrl = modUrl.Replace("&#39;", "'");
-                string fileName = Path.GetFileName(new Uri(modUrl).AbsolutePath);
+                //Meme correctif que dans DownloadMod : un seul nom,decode,partout.
+                string fileName = Uri.UnescapeDataString(Path.GetFileName(new Uri(modUrl).AbsolutePath));
+                string filePath = Path.Combine(_downloadDirectory, fileName);
 
                 if (_downloadedFilenames.Contains(fileName))
                 {
-                    return Path.Combine(_downloadDirectory, fileName);
+                    if (File.Exists(filePath))
+                        return filePath;
+
+                    Plugin.Logger.Debug($"Cache perime pour {fileName}, retelechargement.");
+                    _downloadedFilenames.Remove(fileName);
                 }
+
                 using (HttpResponseMessage response = await _httpClient.GetAsync(modUrl, HttpCompletionOption.ResponseHeadersRead))
                 {
                     response.EnsureSuccessStatusCode();
 
-                    long totalBytes = response.Content.Headers.ContentLength ?? -1;//if header has no contentlength field
                     var modBytes = await response.Content.ReadAsByteArrayAsync();
-                    string filePath = Path.Combine(_downloadDirectory, Uri.UnescapeDataString(fileName));
                     await File.WriteAllBytesAsync(filePath, modBytes);
                     _downloadedFilenames.Add(fileName);
-                return filePath;
+                    return filePath;
                 }
             }
             catch (Exception ex)
@@ -125,18 +130,26 @@ namespace ModArchiveBrowser
         {
             try
             {
-                string fileName = Path.GetFileName(new Uri(modUrl).AbsolutePath);
+                //L'URL est percent-encodee : "kitty%20city.zip".On decode UNE fois et on se sert
+                //du nom decode partout,cle de cache comprise.Auparavant le fichier etait ecrit
+                //decode mais memorise encode : au second telechargement le cache renvoyait un
+                //chemin inexistant et l'installation echouait sur "Invalid file path".
+                string fileName = Uri.UnescapeDataString(Path.GetFileName(new Uri(modUrl).AbsolutePath));
+                string filePath = Path.Combine(_downloadDirectory, fileName);
 
                 if (_downloadedFilenames.Contains(fileName))
                 {
-                    return Path.Combine(_downloadDirectory, fileName);
+                    if (File.Exists(filePath))
+                        return filePath;
+
+                    //Entree periemee (fichier supprime a la main,ou cache ecrit par une version
+                    //anterieure au correctif) : on l'oublie et on retelecharge.
+                    Plugin.Logger.Debug($"Cache perime pour {fileName}, retelechargement.");
+                    _downloadedFilenames.Remove(fileName);
                 }
+
                 byte[] modBytes = _httpClient.GetByteArrayAsync(modUrl).Result;
-
-
-                string filePath = Path.Combine(_downloadDirectory, Uri.UnescapeDataString(fileName));
                 File.WriteAllBytes(filePath, modBytes);
-
 
                 _downloadedFilenames.Add(fileName);
                 return filePath;
@@ -176,6 +189,18 @@ namespace ModArchiveBrowser
                 Plugin.Logger.Debug($"Extracting mod from archive: {filePath}");
                 List<string> modFiles = ExtractModFiles(filePath);
 
+                //Une archive XMA ne contient pas forcement un modpack : beaucoup d'auteurs y
+                //deposent leurs sources (.psd, .blend, textures en vrac).Sans ce garde-fou,
+                //la boucle ne tournait pas et l'utilisateur ne voyait strictement rien.
+                if (modFiles.Count == 0)
+                {
+                    Plugin.ReportError(
+                        $"L'archive {Path.GetFileName(filePath)} ne contient aucun .pmp ni .ttmp2 " +
+                        "(ce sont probablement les fichiers sources de l'auteur). Rien a installer.",
+                        null);
+                    return;
+                }
+
                 // Install each extracted mod file
                 foreach (var modFile in modFiles)
                 {
@@ -183,7 +208,9 @@ namespace ModArchiveBrowser
                     plugin.penumbra.InstallMod(modFile);
                     Plugin.Logger.Debug($"Saving thumbnail: {imagepath}");
                     File.Copy(imagepath, Path.Combine(_thumbnailDirectory,Path.GetFileName(imagepath)), true);
-                    _modNameToThumbnail.Add(Path.GetFileNameWithoutExtension(filePath), Path.Combine(_thumbnailDirectory,Path.GetFileName(imagepath)));
+                    //Indexeur plutot que Add : une archive peut porter plusieurs modpacks,et
+                    //Add aurait leve une ArgumentException des le deuxieme tour de boucle.
+                    _modNameToThumbnail[Path.GetFileNameWithoutExtension(modFile)] = Path.Combine(_thumbnailDirectory,Path.GetFileName(imagepath));
                     UpdateTextures();
                     plugin.penumbra.OpenModWindow();
                 }
@@ -210,7 +237,9 @@ namespace ModArchiveBrowser
                         if (entry.FullName.EndsWith(".ttmp2", StringComparison.OrdinalIgnoreCase) ||
                             entry.FullName.EndsWith(".pmp", StringComparison.OrdinalIgnoreCase))
                         {
-                            string destinationPath = Path.Combine(_downloadDirectory, entry.FullName);
+                            //Chemin aplati : l'entree vit souvent dans un sous-dossier qui n'existe
+                            //pas ici,et un nom du type "../.." sortirait du dossier (zip slip).
+                            string destinationPath = Path.Combine(_downloadDirectory, Path.GetFileName(entry.FullName));
                             entry.ExtractToFile(destinationPath, true);
                             modFiles.Add(destinationPath);
                         }
@@ -226,7 +255,8 @@ namespace ModArchiveBrowser
                         if (!entry.IsDirectory && (entry.Key.EndsWith(".ttmp2", StringComparison.OrdinalIgnoreCase) ||
                                                    entry.Key.EndsWith(".pmp", StringComparison.OrdinalIgnoreCase)))
                         {
-                            string destinationPath = Path.Combine(_downloadDirectory, entry.Key);
+                            //Chemin aplati, meme raison que pour le .zip.
+                            string destinationPath = Path.Combine(_downloadDirectory, Path.GetFileName(entry.Key));
                             entry.WriteToFile(destinationPath);
                             modFiles.Add(destinationPath);
                         }
@@ -242,7 +272,8 @@ namespace ModArchiveBrowser
                         if (!entry.IsDirectory && (entry.Key.EndsWith(".ttmp2", StringComparison.OrdinalIgnoreCase) ||
                                                    entry.Key.EndsWith(".pmp", StringComparison.OrdinalIgnoreCase)))
                         {
-                            string destinationPath = Path.Combine(_downloadDirectory, entry.Key);
+                            //Chemin aplati, meme raison que pour le .zip.
+                            string destinationPath = Path.Combine(_downloadDirectory, Path.GetFileName(entry.Key));
                             entry.WriteToFile(destinationPath);
                             modFiles.Add(destinationPath);
                         }
