@@ -71,48 +71,15 @@ public class MainWindow : Window, IDisposable
             imagesTasks.TryAdd(modThumb.url_thumb, thumbnailTask);
         }
     }
-    /// <summary>
-    /// Barre de navigation.
-    ///
-    /// Les libellés d'origine ("New and Updated from Patreon Subscribers", "Today Most Viewed
-    /// Mods"...) formaient une ligne de boutons gris si large qu'elle débordait sur deux rangées.
-    /// Ils sont ramenés à un mot, l'intitulé complet passant en infobulle, et le rafraîchissement
-    /// va se ranger à droite plutôt que de casser la ligne.
-    /// </summary>
-    private void DrawToolbar()
+    /// <summary>Vue affichée par la fenêtre. Les onglets la changent sur place.</summary>
+    public NavTarget CurrentTarget { get; set; } = NavTarget.Home;
+
+    private void DrawHomePageTable()
     {
-        if (ImGui.Button("Search"))
-        {
-            OpenSearch(null);
-        }
-        Tooltip("Search the archive with filters");
+        NavBar.Context(NavBar.TitleOf(NavTarget.Home), modThumbs?.Count ?? 0);
 
-        ImGui.SameLine();
-        ImGui.TextDisabled("|");
-        ImGui.SameLine();
-
-        if (ImGui.Button("Trending"))
-        {
-            OpenSearch(WebClient.today_most_viewed);
-        }
-        Tooltip("Today's most viewed mods");
-
-        ImGui.SameLine();
-        if (ImGui.Button("Newest"))
-        {
-            OpenSearch(WebClient.newest_mods_from_all_users);
-        }
-        Tooltip("Newest mods from all users");
-
-        ImGui.SameLine();
-        if (ImGui.Button("Sponsored"))
-        {
-            OpenSearch(WebClient.new_and_updated_from_patreon_subs);
-        }
-        Tooltip("New and updated mods from Patreon subscribers");
-
-        //Le bouton de rafraichissement est aligne a droite : il n'appartient pas a la navigation
-        //et occupait auparavant une deuxieme ligne a lui tout seul.
+        //Le rafraichissement ne concerne que l'accueil : les autres vues se rechargent par leur
+        //propre bouton de recherche.
         var label = "Refresh";
         var buttonWidth = ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2f;
         ImGui.SameLine(ImGui.GetContentRegionMax().X - buttonWidth);
@@ -125,36 +92,16 @@ public class MainWindow : Window, IDisposable
                 refreshTask = Task.Run(Refresh);
             }
         }
-        Tooltip(busy ? "Loading..." : "Reload the homepage");
-    }
-
-    private static void Tooltip(string text)
-    {
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(text);
-    }
-
-    private void OpenSearch(string? presetSearch)
-    {
-        plugin.searchWindow.IsOpen = true;
-        plugin.searchWindow.BringToFront();
-
-        if (!presetSearch.IsNullOrEmpty())
-        {
-            Plugin.Logger.Debug(presetSearch);
-            plugin.searchWindow.UpdateSearch(presetSearch);
-        }
-
-        this.IsOpen = false;
-    }
-
-    private void DrawHomePageTable()
-    {
-        DrawToolbar();
-        if (modThumbs == null)
-            return;
+            ImGui.SetTooltip(busy ? "Loading..." : "Reload the homepage");
 
         ImGui.Separator();
+
+        if (modThumbs == null)
+        {
+            ImGui.TextDisabled("Loading the homepage...");
+            return;
+        }
 
         //Le nombre de colonnes suit la largeur de la fenetre au lieu d'etre fige a trois : sur
         //une fenetre large, la grille laissait un vide equivalent a deux colonnes sur sa droite.
@@ -201,6 +148,18 @@ public class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
-        DrawHomePageTable();  
+        //Une seule fenetre pour toutes les vues. La barre change le contenu sur place au lieu
+        //de fermer une fenetre pour en ouvrir une autre, d'aspect identique et sans transition.
+        NavBar.Draw(plugin, CurrentTarget);
+        ImGui.Separator();
+
+        if (CurrentTarget == NavTarget.Home)
+        {
+            DrawHomePageTable();
+        }
+        else
+        {
+            plugin.searchWindow.DrawEmbedded(NavBar.TitleOf(CurrentTarget));
+        }
     }
 }

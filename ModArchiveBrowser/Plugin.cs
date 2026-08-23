@@ -119,8 +119,17 @@ public sealed class Plugin : IDalamudPlugin
     {
         switch(command)
         {
-            case "/archive":MainWindow.Toggle();break;
-            case "/modsearch":searchWindow.Toggle();break;
+            case "/archive":
+                MainWindow.CurrentTarget = Utils.NavTarget.Home;
+                MainWindow.Toggle();
+                break;
+            //La recherche n'a plus sa propre fenetre : la commande ouvre la fenetre principale
+            //sur l'onglet correspondant.
+            case "/modsearch":
+                MainWindow.CurrentTarget = Utils.NavTarget.Search;
+                MainWindow.IsOpen = true;
+                MainWindow.BringToFront();
+                break;
             case "/archiveconfig":ConfigWindow.Toggle();break;
             case "/modid": if (!args.IsNullOrEmpty())
                 {

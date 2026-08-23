@@ -78,18 +78,37 @@ namespace ModArchiveBrowser.Windows
             }
         }
 
-        public void DrawSearchHeader()
+        /// <summary>
+        /// Dessine la recherche à l'intérieur de la fenêtre principale.
+        ///
+        /// Cette classe reste un Window par commodité, mais elle n'est plus jamais ouverte comme
+        /// telle : cliquer sur un onglet fermait l'accueil pour ouvrir une seconde fenêtre d'aspect
+        /// identique, ce qui donnait l'impression de se perdre. Tout se passe desormais au meme
+        /// endroit, et le bouton "Go back to homepage" n'a plus de raison d'etre.
+        /// </summary>
+        public void DrawEmbedded(string title)
         {
-            ImGui.Text("Search for Mods");
-            ImGui.SameLine();
-            if(ImGui.Button("Go back to homepage"))
-            {
-                plugin.MainWindow.Toggle();
-                plugin.MainWindow.BringToFront();
-                plugin.searchWindow.Toggle();
-            }
+            NavBar.Context(title, modThumbs?.Count ?? 0, page);
             ImGui.Separator();
 
+            DrawSearchHeader();
+
+            if (modThumbs != null && modThumbs.Count > 0 && searchTask is { Status: TaskStatus.RanToCompletion })
+            {
+                DrawSearchResults();
+            }
+            else if (searchTask is { IsCompleted: false })
+            {
+                ImGui.TextDisabled("Searching...");
+            }
+            else if (modThumbs is { Count: 0 })
+            {
+                ImGui.TextDisabled("No mod matches these filters.");
+            }
+        }
+
+        public void DrawSearchHeader()
+        {
             // Search Form
             ImGui.InputText("Search for mods...", ref searchQuery, 100);
             ImGui.SameLine();
@@ -336,13 +355,13 @@ namespace ModArchiveBrowser.Windows
             }
         }
         
+        /// <summary>
+        /// Jamais appelé : la fenêtre n'est plus ouverte, son contenu est dessiné par la fenêtre
+        /// principale via DrawEmbedded. La classe reste un Window pour ne pas defaire le systeme
+        /// de fenetres du plugin.
+        /// </summary>
         public override void Draw()
         {
-            DrawSearchHeader();
-            if (modThumbs.Count > 0 && searchTask != null && searchTask.Status == TaskStatus.RanToCompletion)
-            {
-                DrawSearchResults();
-            }
         }
     }
 }
