@@ -28,6 +28,7 @@ namespace ModArchiveBrowser.Windows
         private bool _isLoading = false;
         private string _statusMessage = string.Empty;
         private bool lastNodeWasBr = false;
+        private bool _alreadyInstalled = false;
         public ModWindow(Plugin plugin): base("Mod view window##")
         {
             this.plugin = plugin;
@@ -41,11 +42,58 @@ namespace ModArchiveBrowser.Windows
         public void ChangeMod(ModThumb modThumb)
         {
             (this.mod,this.descriptionNodes) = WebClient.GetModPage(modThumb);
+            RefreshInstalledState();
         }
 
         public void ChangeMod(string modId)
         {
             (this.mod, this.descriptionNodes) = WebClient.GetModPage(modId);
+            RefreshInstalledState();
+        }
+
+        /// <summary>Vrai si le fichier est heberge par XMA, donc installable directement.</summary>
+        private bool HostedByXma =>
+            mod.HasValue && mod.Value.url_download_button.Contains("private");
+
+        /// <summary>Nom de l'hebergeur externe, pour l'expliquer a l'utilisateur.</summary>
+        private string ExternalHost()
+        {
+            try
+            {
+                var host = new Uri(mod!.Value.url_download_button).Host.Replace("www.", string.Empty);
+                return string.IsNullOrEmpty(host) ? "another site" : host;
+            }
+            catch
+            {
+                return "another site";
+            }
+        }
+
+        /// <summary>
+        /// Determine une fois si Penumbra connait deja ce mod, plutot qu'a chaque frame.
+        ///
+        /// IsModInstalled interroge Penumbra par IPC et lui fait construire la liste complete de
+        /// ses mods : appele depuis la boucle de rendu, ce serait soixante fois par seconde.
+        /// L'etat ne change qu'a deux moments, changement de mod et fin d'installation.
+        /// </summary>
+        private void RefreshInstalledState()
+        {
+            if (!HostedByXma)
+            {
+                _alreadyInstalled = false;
+                return;
+            }
+
+            try
+            {
+                var fileName = Path.GetFileNameWithoutExtension(
+                    Uri.UnescapeDataString(new Uri(WebClient.xivmodarchiveRoot + mod!.Value.url_download_button).AbsolutePath));
+                _alreadyInstalled = plugin.penumbra.IsModInstalled(fileName);
+            }
+            catch
+            {
+                _alreadyInstalled = false;
+            }
         }
         public void Dispose()
         {
@@ -143,7 +191,12 @@ namespace ModArchiveBrowser.Windows
                 _statusMessage = "Installing...";
                 plugin.modHandler.InstallMod(modpath, plugin.imageHandler.GetImage(mod.Value.modThumb.url_thumb));
 
-            }).ContinueWith(task => { _isLoading = false; });
+            }).ContinueWith(task =>
+            {
+                _isLoading = false;
+                //Le bouton doit passer a "Already installed" sans attendre un changement de mod.
+                RefreshInstalledState();
+            });
         }
 
         private void DrawLoading()
@@ -180,12 +233,19 @@ namespace ModArchiveBrowser.Windows
                 case DTCompatibility.PartiallyCompatible: ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "DT Compatibility: This mod is only partially functional in Dawntrail. Some parts may be significantly broken or require TT to fix."); break;
                 case DTCompatibility.NotCompatible: ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "DT Compatibility:❌ This mod does NOT work in Dawntrail, and is entirely non-functional. It will be eventually removed if not updated by the author."); break;
             }
-            ImGui.Columns(2, "Columns", true);
+            //Deux enfants cote a cote plutot qu'ImGui.Columns. Columns est une API historique qui
+            //memorise ses offsets par fenetre et les tenait a une largeur fixe : la colonne de
+            //gauche restait etroite quelle que soit la taille de la fenetre, laissant une bande
+            //vide au milieu par laquelle on voyait la fenetre du dessous. Ici les largeurs sont
+            //recalculees a chaque frame et suivent donc le redimensionnement.
+            var avail = ImGui.GetContentRegionAvail();
+            var spacing = ImGui.GetStyle().ItemSpacing.X;
+            var leftWidth = MathF.Max(220f, (avail.X - spacing) * 0.58f);
+            var rightWidth = MathF.Max(200f, avail.X - leftWidth - spacing);
 
             // Left Column (Mod Information)
             {
-                // Mod Title
-                ImGui.BeginChild("LeftColumn", new Vector2(0, 0), true);
+                ImGui.BeginChild("LeftColumn", new Vector2(leftWidth, 0), true);
                 //TextWrapped et non Text : les titres de mods sont longs et se faisaient couper
                 //en plein milieu, sans meme une ellipse.
                 ImGui.TextWrapped(mod.Value.modThumb.name);
@@ -194,9 +254,8 @@ namespace ModArchiveBrowser.Windows
 
                 // Author
                 ImGui.TextWrapped($"{mod.Value.modThumb.type} by {mod.Value.modThumb.author}");
+                ImGui.Spacing();
 
-                // Image Carousel Placeholder
-                ImGui.Text("Mod Preview Image");
                 var thumbPath = plugin.imageHandler.GetImage(mod.Value.modThumb.url_thumb);
                 var modThumbnail = thumbPath.IsNullOrEmpty()
                     ? null
@@ -204,12 +263,18 @@ namespace ModArchiveBrowser.Windows
 
                 if (modThumbnail != null)
                 {
-                    ImGui.Image(modThumbnail.Handle, new Vector2(300, 200)); // Placeholder for image carousel
+                    //ImageFullWidth respecte le ratio de l'image et occupe la largeur disponible.
+                    //L'ancien appel forcait 300x200 : les previews, souvent larges, se
+                    //retrouvaient ecrasees. Cette aide existait deja dans le projet, inutilisee.
+                    StaticHelpers.ImageFullWidth(modThumbnail, 320f);
                 }
                 else
                 {
-                    StaticHelpers.PlaceholderBox(new Vector2(300, 200), "Loading preview...");
+                    StaticHelpers.PlaceholderBox(new Vector2(ImGui.GetContentRegionAvail().X, 200), "Loading preview...");
                 }
+
+                ImGui.Spacing();
+                ImGui.Separator();
 
                 // Tabs (Info, Files, History)
                 DrawDescHtmlFromNode(descriptionNodes.First());
@@ -217,11 +282,11 @@ namespace ModArchiveBrowser.Windows
                 ImGui.EndChild();
             }
 
-            ImGui.NextColumn(); // Move to right column
+            ImGui.SameLine();
 
             // Right Column (Author Info, Download, Stats)
             {
-                ImGui.BeginChild("RightColumn", new Vector2(0, 0), true);
+                ImGui.BeginChild("RightColumn", new Vector2(rightWidth, 0), true);
 
                 // Author Card
                 ImGui.TextWrapped(mod.Value.modThumb.author);
@@ -246,12 +311,23 @@ namespace ModArchiveBrowser.Windows
                 ImGui.Separator();
 
                 // Download button
-                if (mod.Value.url_download_button.Contains("private"))//keep it simple now but will need to be updated
+                //url_download_button pointe vers /private/... quand XMA heberge le fichier, vers
+                //Mega, Drive ou Patreon sinon. Environ un tiers du catalogue est dans ce second
+                //cas et reste hors de portee : mieux vaut nommer l'hebergeur que laisser un
+                //bouton grise sans explication.
+                if (_alreadyInstalled)
+                {
+                    ImGui.BeginDisabled();
+                    ImGui.Button("Already installed");
+                    ImGui.EndDisabled();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Penumbra already has a mod with this name.");
+                }
+                else if (HostedByXma)
                 {
                     if (ImGui.Button("Install using Penumbra"))
                     {
                         StartInstall();
-
                     }
                 }
                 else
@@ -259,8 +335,10 @@ namespace ModArchiveBrowser.Windows
                     ImGui.BeginDisabled();
                     ImGui.Button("Not available");
                     ImGui.EndDisabled();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip($"Hosted on {ExternalHost()}, outside xivmodarchive.\nUse \"Open in browser\" to get it manually.");
                 }
-                
+
                 ImGui.SameLine();
                 if(ImGui.Button("Open in browser"))
                 {
