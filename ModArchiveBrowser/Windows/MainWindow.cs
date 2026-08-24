@@ -322,8 +322,8 @@ public class MainWindow : Window, IDisposable
 
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(
-                "Replaces each mod in place: your settings and option choices are carried over,\n" +
-                "and the old version is removed.\n\n" +
+                "Replaces each mod in place: the old version is removed once the new one has been\n" +
+                "downloaded, and Penumbra hands its settings and option choices to the replacement.\n\n" +
                 "Mods hosted outside xivmodarchive cannot be updated from here and are listed below.");
     }
 

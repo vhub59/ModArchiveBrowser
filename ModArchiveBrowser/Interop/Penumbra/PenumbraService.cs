@@ -157,13 +157,37 @@ namespace ModArchiveBrowser.Interop.Penumbra
         public string? LastEnabled { get; private set; }
 
         /// <summary>
-        /// Demande que le prochain mod installe prenne la place de celui-ci.
+        /// Retire un mod. Ses reglages survivent, ranges par Penumbra en "unused settings".
         ///
-        /// Penumbra ne remplace jamais : un second appel a InstallMod cree un dossier "Mod (2)" et
-        /// laisse l'ancien actif. Une mise a jour naive empilerait donc les versions sans rien
-        /// mettre a jour du tout.
+        /// C'est ce qui rend la mise a jour propre possible : on supprime avant d'installer, si
+        /// bien que le nom de dossier se libere et que le nouveau mod le reprend tel quel.
+        /// Installer d'abord laissait Penumbra suffixer le dossier — "Mod (2)" — et ce suffixe
+        /// restait apres coup, alors que rien ne le justifiait plus.
         /// </summary>
-        public void ReplaceComingInstall(string oldDirectory)
+        public PenumbraApiEc RemoveMod(string directory)
+        {
+            if (!Available || string.IsNullOrEmpty(directory))
+                return PenumbraApiEc.UnknownError;
+
+            try
+            {
+                return _deleteMod!.Invoke(directory, string.Empty);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.Debug($"Could not remove \"{directory}\":\n{ex}");
+                return PenumbraApiEc.UnknownError;
+            }
+        }
+
+        /// <summary>
+        /// Demande que le prochain mod installe reprenne les reglages de celui-ci.
+        ///
+        /// A armer apres RemoveMod : quand le nouveau dossier porte le meme nom que l'ancien,
+        /// Penumbra rattache ses reglages tout seul et il n'y a rien a faire. Le report n'est
+        /// necessaire que si l'auteur a renomme son modpack entre deux versions.
+        /// </summary>
+        public void ReattachSettingsFrom(string oldDirectory)
         {
             _pendingReplace = oldDirectory;
             _replaceUntil = DateTime.UtcNow + TimeSpan.FromMinutes(2);
@@ -183,48 +207,48 @@ namespace ModArchiveBrowser.Interop.Penumbra
         }
 
         /// <summary>
-        /// Vrai tant qu'un remplacement attend le mod qui doit le declencher.
+        /// Vrai tant qu'un report de reglages attend le mod qui doit le declencher.
         ///
         /// Une mise a jour groupee doit les enchainer un par un : l'attente ne designe qu'un seul
-        /// ancien mod, et lancer la suivante avant que ModAdded n'ait livre la precedente ferait
-        /// supprimer le mauvais mod.
+        /// ancien mod, et lancer la suivante avant que ModAdded n'ait livre la precedente
+        /// appliquerait les reglages du mauvais mod.
         /// </summary>
         public bool ReplacementPending => _pendingReplace != null;
 
-        /// <summary>Abandonne le remplacement en attente, quand le mod n'est jamais arrive.</summary>
+        /// <summary>Abandonne le report en attente, quand le mod n'est jamais arrive.</summary>
         public void CancelComingReplacement() => _pendingReplace = null;
 
         /// <summary>Dernier remplacement abouti : ancien dossier vers nouveau.</summary>
         public (string From, string To)? LastReplacement { get; private set; }
 
         /// <summary>
-        /// Reporte les reglages de l'ancien mod sur le nouveau, puis supprime l'ancien.
+        /// Rend au mod fraichement installe les reglages de celui qu'il remplace.
         ///
-        /// CopyModSettings avec une collection nulle couvre toutes les collections d'un coup :
-        /// etat active, priorite et choix d'options suivent donc partout. Penumbra corrige au
-        /// passage les reglages devenus caducs, ce qui compte ici — entre deux versions, un auteur
-        /// renomme ou retire des groupes d'options.
+        /// Le plus souvent il n'y a rien a faire : l'ancien ayant ete supprime avant l'installation,
+        /// le nouveau reprend son nom de dossier, et Penumbra lui rend ses reglages de lui-meme —
+        /// c'est le propre des "unused settings", qu'il conserve precisement pour cela.
         ///
-        /// L'ancien n'est supprime que si la copie a reussi. Sans cette garde, une copie ratee
-        /// laisserait l'utilisateur avec un mod neuf sans reglages et plus rien pour les
-        /// retrouver — la suppression, elle, est irreversible.
+        /// Le report ne sert que lorsque le dossier a change de nom, l'auteur ayant renomme son
+        /// modpack entre deux versions. CopyModSettings lit alors ces memes reglages orphelins :
+        /// "if the source mod does not exist, it will use unused settings if available". Avec une
+        /// collection nulle, l'operation couvre toutes les collections d'un coup, et Penumbra
+        /// corrige au passage les options qui n'existent plus dans la nouvelle version.
         /// </summary>
         private void Replace(string oldDirectory, string newDirectory)
         {
+            if (string.Equals(oldDirectory, newDirectory, StringComparison.Ordinal))
+            {
+                LastReplacement = (oldDirectory, newDirectory);
+                return;
+            }
+
             try
             {
                 var copied = _copyModSettings!.Invoke(null, oldDirectory, newDirectory);
                 if (copied != PenumbraApiEc.Success)
                 {
                     Plugin.Logger.Warning(
-                        $"Could not carry settings from \"{oldDirectory}\" to \"{newDirectory}\" ({copied}); keeping both versions.");
-                    return;
-                }
-
-                var deleted = _deleteMod!.Invoke(oldDirectory, string.Empty);
-                if (deleted != PenumbraApiEc.Success)
-                {
-                    Plugin.Logger.Warning($"Settings were carried over, but \"{oldDirectory}\" could not be removed ({deleted}).");
+                        $"\"{newDirectory}\" was installed, but the settings of \"{oldDirectory}\" could not be carried over ({copied}).");
                     return;
                 }
 
@@ -232,7 +256,7 @@ namespace ModArchiveBrowser.Interop.Penumbra
             }
             catch (Exception ex)
             {
-                Plugin.Logger.Debug($"Could not replace \"{oldDirectory}\":\n{ex}");
+                Plugin.Logger.Debug($"Could not carry settings from \"{oldDirectory}\":\n{ex}");
             }
         }
 

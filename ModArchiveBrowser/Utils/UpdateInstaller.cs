@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Penumbra.Api.Enums;
 
 namespace ModArchiveBrowser.Utils
 {
@@ -154,12 +155,24 @@ namespace ModArchiveBrowser.Utils
                 .DownloadModAsync(WebClient.xivmodarchiveRoot + facts.DownloadUrl)
                 .ConfigureAwait(false);
 
-            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            //Le fichier doit etre la, entier, avant qu'on ne touche a l'installation existante :
+            //c'est ce qui separe une mise a jour d'une perte seche.
+            if (string.IsNullOrEmpty(path) || !File.Exists(path) || new FileInfo(path).Length == 0)
                 return "the download failed";
+
+            //L'ancien part avant que le nouveau n'arrive. Penumbra ne remplace pas : installer
+            //d'abord lui fait creer un dossier suffixe — "Mod (2)" — et ce suffixe restait ensuite
+            //pour toujours, alors que plus rien ne le justifiait.
+            //
+            //Les reglages ne sont pas perdus pour autant : Penumbra les conserve en "unused
+            //settings", ranges sous le nom du dossier, et les rend au mod qui reprend ce nom.
+            var removed = _plugin.penumbra.RemoveMod(update.Directory);
+            if (removed != PenumbraApiEc.Success)
+                return $"the old version could not be removed ({removed})";
 
             //Arme avant l'installation : Penumbra annonce le mod des qu'il l'a depaquete, ce qui
             //peut arriver avant qu'InstallMod nous ait rendu la main.
-            _plugin.penumbra.ReplaceComingInstall(update.Directory);
+            _plugin.penumbra.ReattachSettingsFrom(update.Directory);
 
             //Le nouveau dossier doit heriter du lien vers XMA, sans quoi le mod ne serait plus
             //verifiable des la mise a jour suivante.
@@ -190,7 +203,11 @@ namespace ModArchiveBrowser.Utils
                 if (DateTime.UtcNow > deadline)
                 {
                     _plugin.penumbra.CancelComingReplacement();
-                    return "Penumbra did not report the mod in time";
+
+                    //L'ancienne version a deja ete retiree a ce stade. On le dit franchement : le
+                    //mod est absent de Penumbra, et l'utilisateur doit savoir qu'il lui manque
+                    //quelque chose plutot que de le decouvrir en jeu.
+                    return "Penumbra did not report the mod in time — the old version was already removed, reinstall it from its page";
                 }
 
                 await Task.Delay(200, token).ConfigureAwait(false);
