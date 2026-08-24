@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Numerics;
 using Dalamud.Interface.Internal;
 using Dalamud.Interface.Utility;
@@ -193,17 +194,36 @@ public class MainWindow : Window, IDisposable
     }
 
     /// <summary>
-    /// Mods installes pour lesquels XMA publie une autre version.
+    /// La bibliotheque installee, et ce que XMA publie pour chacun de ses mods.
     ///
-    /// Penumbra inscrit dans chaque meta.json l'adresse d'origine du mod : on sait donc lesquels
-    /// viennent de XMA, et avec quel identifiant. La verification coute une requete par mod
-    /// installe — quelques dizaines — la ou indexer le catalogue entier en demanderait 52 000.
+    /// L'onglet ne montrait que les mods a mettre a jour, ce qui paraissait suffisant et ne
+    /// l'etait pas : quand aucun mod n'est rattache a une page XMA — le cas ordinaire — il
+    /// affichait "Everything is up to date", une affirmation fausse et parfaitement credible.
+    ///
+    /// La bibliotheque entiere est donc listee, chaque mod portant son etat. La couverture devient
+    /// visible : on voit combien de mods sont suivis, combien ne le sont pas, et on peut rattacher
+    /// les seconds a leur page.
+    ///
+    /// La verification coute une requete par mod suivi — quelques dizaines — la ou indexer le
+    /// catalogue entier en demanderait 96 000.
     /// </summary>
     private void DrawUpdates()
     {
         var checker = plugin.updateChecker;
+        checker.RefreshLibraryIfStale();
 
-        NavBar.Context(NavBar.TitleOf(NavTarget.Updates), checker.Updates.Count);
+        //La ligne de contexte porte la couverture, pas seulement le delta : "12 mods · 8 tracked"
+        //dit en un coup d'oeil ce qu'une liste vide ne disait pas.
+        NavBar.Context(NavBar.TitleOf(NavTarget.Updates), checker.Library.Count);
+
+        if (checker.Library.Count > 0)
+        {
+            ImGui.SameLine();
+            var tracked = checker.Library.Count - checker.UntrackedCount;
+            ImGui.TextDisabled(checker.UntrackedCount == 0
+                ? "·  all tracked"
+                : $"·  {tracked} tracked, {checker.UntrackedCount} of unknown origin");
+        }
 
         var installer = plugin.updateInstaller;
         var busy = checker.IsRunning || installer.IsRunning;
@@ -228,65 +248,184 @@ public class MainWindow : Window, IDisposable
             return;
         }
 
-        if (checker.LastRun == null && !checker.IsRunning)
-        {
-            ImGui.TextDisabled("Your installed mods have not been checked yet.");
-            ImGui.Spacing();
+        if (checker.Updates.Count > 0)
+            DrawUpdateAll();
 
-            //On dit d'ou vient la limite plutot que de laisser croire a une couverture complete :
-            //un mod installe avant cette version, ou par un autre moyen, ne peut pas etre
-            //rattache a sa page XMA, et son absence de la liste ne veut pas dire qu'il est a jour.
-            ImGui.TextDisabled("Only mods installed through this plugin can be checked: it records");
-            ImGui.TextDisabled("which xivmodarchive page each one came from.");
-            ImGui.Spacing();
-            ImGui.TextDisabled("Mods installed another way are not tracked. Reinstalling one from");
-            ImGui.TextDisabled("its page here is enough to pick it up.");
-            return;
-        }
-
-        if (checker.Updates.Count == 0)
-        {
-            ImGui.TextDisabled(checker.IsRunning ? "Checking..." : "Everything is up to date.");
-            DrawUpdateReport();
-            return;
-        }
-
-        DrawUpdateAll();
         DrawUpdateReport();
-        ImGui.Separator();
 
-        foreach (var update in checker.Updates)
+        if (checker.Library.Count == 0)
         {
-            ImGui.TextUnformatted(update.Name);
-            ImGui.SameLine();
-            ImGui.TextDisabled($"·  {update.InstalledVersion}  →  {update.PublishedVersion}");
+            ImGui.TextDisabled("Penumbra has no mods installed.");
+            return;
+        }
 
-            ImGui.SameLine(ImGui.GetContentRegionMax().X - 190f);
+        //Une zone defilante : la bibliotheque peut compter des centaines de mods, la ou l'ancienne
+        //liste ne montrait que le delta et tenait toujours a l'ecran.
+        using var list = ImRaii.Child("updateslist", new Vector2(0, 0), false);
+        if (!list)
+            return;
 
-            using (ImRaii.Disabled(installer.IsRunning))
+        foreach (var entry in checker.Library)
+            DrawLibraryRow(entry);
+    }
+
+    /// <summary>
+    /// Une ligne de la bibliotheque : le mod, son etat, et ce qu'on peut en faire.
+    ///
+    /// L'onglet ne montrait que les mods a mettre a jour. C'etait insuffisant d'une facon qui ne
+    /// se voyait pas : quand aucun mod n'est rattache a une page XMA, l'ecran affichait
+    /// "Everything is up to date", ce qui est faux et parfaitement credible. La liste complete
+    /// rend la couverture visible — combien de mods sont suivis, combien ne le sont pas.
+    /// </summary>
+    private void DrawLibraryRow(LibraryEntry entry)
+    {
+        var mod = entry.Mod;
+
+        ImGui.TextUnformatted(mod.Name);
+        ImGui.SameLine();
+
+        switch (entry.State)
+        {
+            case ModCheckState.UpdateAvailable:
+                ImGui.TextColored(Theme.Positive, $"·  {mod.Version}  →  {entry.PublishedVersion}");
+                break;
+
+            case ModCheckState.UpToDate:
+                ImGui.TextDisabled($"·  {mod.Version}  ·  up to date");
+                break;
+
+            case ModCheckState.Unreadable:
+                ImGui.TextColored(Theme.Warning, $"·  {mod.Version}  ·  its page could not be read");
+                break;
+
+            case ModCheckState.NotTracked:
+                ImGui.TextDisabled($"·  {mod.Version}  ·  not tracked");
+                break;
+
+            default:
+                ImGui.TextDisabled($"·  {mod.Version}  ·  not checked yet");
+                break;
+        }
+
+        DrawRowActions(entry);
+
+        if (plugin.modLinker.Target == mod.Directory)
+            DrawLinkCandidates(mod);
+
+        ImGui.Separator();
+    }
+
+    /// <summary>Boutons de fin de ligne, alignes a droite.</summary>
+    private void DrawRowActions(LibraryEntry entry)
+    {
+        var installer = plugin.updateInstaller;
+        var mod = entry.Mod;
+
+        if (entry.State == ModCheckState.NotTracked)
+        {
+            var linker = plugin.modLinker;
+            var open = linker.Target == mod.Directory;
+            var label = open ? "Cancel" : "Find on XMA";
+
+            ImGui.SameLine(ImGui.GetContentRegionMax().X - 150f);
+
+            using (ImRaii.Disabled(linker.IsRunning && !open))
             {
-                //Le mod est remplace en place : reglages reportes, ancienne version supprimee.
-                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, $"Update##{update.ModId}"))
-                    installer.Start(new[] { update });
+                if (ImGuiComponents.IconButtonWithText(
+                        open ? FontAwesomeIcon.Times : FontAwesomeIcon.Search, $"{label}##link{mod.Directory}"))
+                {
+                    if (open)
+                        linker.Close();
+                    else
+                        linker.Search(mod);
+                }
             }
 
-            ImGui.SameLine();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(
+                    "This mod cannot be checked: nothing says which xivmodarchive page it came from.\n" +
+                    "Its own metadata points at the author's Ko-fi or Patreon, not at the archive.\n\n" +
+                    "Search by name and pick the right page to start tracking it.");
 
-            //Ouvrir la fiche reste utile pour lire les notes de version avant de se decider.
-            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.ArrowRight, $"View##{update.ModId}"))
+            return;
+        }
+
+        if (entry.State != ModCheckState.UpdateAvailable)
+            return;
+
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - 190f);
+
+        using (ImRaii.Disabled(installer.IsRunning))
+        {
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, $"Update##{mod.Directory}"))
+                installer.Start(new[]
+                {
+                    new ModUpdate(mod.XmaModId!, mod.Directory, mod.Name, mod.Version, entry.PublishedVersion),
+                });
+        }
+
+        ImGui.SameLine();
+
+        //Ouvrir la fiche reste utile pour lire les notes de version avant de se decider.
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.ArrowRight, $"View##{mod.Directory}"))
+        {
+            try
             {
-                try
-                {
-                    plugin.modWindow.ChangeMod(update.ModId);
-                    ShowingMod = true;
-                }
-                catch (Exception e)
-                {
-                    Plugin.ReportError("Error while loading mod,check /xllog for details", e);
-                }
+                plugin.modWindow.ChangeMod(mod.XmaModId!);
+                ShowingMod = true;
             }
+            catch (Exception e)
+            {
+                Plugin.ReportError("Error while loading mod,check /xllog for details", e);
+            }
+        }
+    }
 
-            ImGui.Separator();
+    /// <summary>
+    /// Pages proposees pour un mod dont l'origine est inconnue.
+    ///
+    /// C'est l'utilisateur qui tranche, et non une correspondance automatique par nom : un
+    /// homonyme suffirait a lier le mauvais mod, et un mauvais lien fait installer puis supprimer
+    /// le mauvais mod a la mise a jour suivante. Le nom de l'auteur est affiche pour cela — c'est
+    /// souvent le seul moyen de departager deux mods au titre identique.
+    /// </summary>
+    private void DrawLinkCandidates(InstalledMod mod)
+    {
+        var linker = plugin.modLinker;
+
+        using var indent = ImRaii.PushIndent();
+
+        if (linker.IsRunning)
+        {
+            ImGui.TextDisabled("Searching xivmodarchive...");
+            return;
+        }
+
+        if (linker.NothingFound)
+        {
+            ImGui.TextDisabled($"Nothing found for \"{ModLinker.QueryFor(mod.Name)}\".");
+            ImGui.TextDisabled("The mod may have been removed, or published under another name.");
+            return;
+        }
+
+        foreach (var candidate in linker.Candidates)
+        {
+            var modId = AvailabilityIndex.ModIdFromUrl(candidate.url);
+            if (modId == null)
+                continue;
+
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Link, $"Link##pick{modId}"))
+                linker.Link(mod.Directory, modId);
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted(candidate.name);
+            ImGui.SameLine();
+            ImGui.TextDisabled($"·  by {candidate.author}");
+
+            //Verifier avant de lier : deux mods peuvent porter le meme titre, et la page tranche.
+            ImGui.SameLine(ImGui.GetContentRegionMax().X - 70f);
+            if (ImGui.SmallButton($"Open##pick{modId}"))
+                Process.Start(new ProcessStartInfo($"{WebClient.xivmodarchiveRoot}/modid/{modId}") { UseShellExecute = true });
         }
     }
 

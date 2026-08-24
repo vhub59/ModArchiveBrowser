@@ -31,11 +31,15 @@ This is a 3rd party plugin. If you are having problems with it, open an issue on
 - Browse, search and filter the archive without leaving the game
 - One-click install into Penumbra, with the button telling you what will actually happen:
   install, update, already installed, or not installable — and why
+- **Your whole library, with its status**: every installed mod is listed as up to date, out of
+  date, or of unknown origin. Showing only the mods with updates was worse than useless — when
+  nothing is tracked, an empty list reads as "everything is up to date"
 - **Update checker**: compares your installed mods against what xivmodarchive publishes today.
   The plugin records which page each mod it installs came from, so the check costs one request
-  per installed mod rather than crawling the whole site. Mods installed some other way are not
-  tracked — a modpack's own metadata points at the author's Ko-fi or Patreon far more often than
-  at its archive page
+  per installed mod rather than crawling the whole site
+- **Find on XMA**: mods installed before, or by other means, carry no link to their archive page —
+  a modpack's own metadata points at the author's Ko-fi or Patreon far more often. Search by name
+  and pick the right page to start tracking them
 - **Update all**, replacing each mod in place rather than stacking versions: your settings and
   option choices are carried across every collection, and the old version is removed. Mods hosted
   elsewhere cannot be updated from here, and are listed by name instead of silently skipped

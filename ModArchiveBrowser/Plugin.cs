@@ -42,6 +42,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Applique les mises a jour detectees, en remplacant les mods plutot qu'en les empilant.</summary>
     public readonly UpdateInstaller updateInstaller;
 
+    /// <summary>Retrouve sur XMA la page d'un mod installe dont l'origine est inconnue.</summary>
+    public readonly ModLinker modLinker;
+
     /// <summary>Renseigne l'installabilite des mods affiches avant qu'on ne clique dessus.</summary>
     public readonly AvailabilityPrefetcher prefetcher;
 
@@ -104,6 +107,7 @@ public sealed class Plugin : IDalamudPlugin
         penumbra.XmaModInstalled += RememberInstalledMod;
         updateChecker = new UpdateChecker(this);
         updateInstaller = new UpdateInstaller(this);
+        modLinker = new ModLinker(this);
         prefetcher = new AvailabilityPrefetcher(this);
 
         CommandManager.AddHandler("/archive", new CommandInfo(OnCommand)
