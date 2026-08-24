@@ -93,6 +93,20 @@ public class Configuration : IPluginConfiguration
     /// </summary>
     public string InstallCollection { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Mods installes par ce plugin : dossier de Penumbra vers identifiant XMA.
+    ///
+    /// La verification des mises a jour se fondait uniquement sur le champ Website du meta.json,
+    /// en croyant y lire l'origine du mod. Or ce champ est ecrit par l'auteur du modpack, pas par
+    /// l'installeur : il y met son Ko-fi, son Discord, son Patreon. Sur une bibliotheque reelle,
+    /// verifiee mod par mod, aucun n'y portait l'adresse de XMA — l'onglet Updates ne pouvait donc
+    /// rien trouver, quoi qu'il arrive.
+    ///
+    /// Le lien doit venir de nous : on sait exactement quel mod de XMA on installe, et Penumbra
+    /// nous rend le dossier cree. C'est la seule source fiable, et elle ne coute aucune requete.
+    /// </summary>
+    public Dictionary<string, string> InstalledFromXma { get; set; } = new Dictionary<string, string>();
+
     // the below exist just to make saving less cumbersome
     public void Save()
     {

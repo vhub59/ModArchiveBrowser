@@ -326,7 +326,7 @@ namespace ModArchiveBrowser.Windows
                 var fileName = Path.GetFileNameWithoutExtension(
                     Uri.UnescapeDataString(new Uri(WebClient.xivmodarchiveRoot + mod!.Value.url_download_button).AbsolutePath));
 
-                var installed = InstalledMods.Read(plugin.penumbra.GetModDirectory());
+                var installed = InstalledMods.Read(plugin.penumbra.GetModDirectory(), plugin.Configuration.InstalledFromXma);
                 var modId = AvailabilityIndex.ModIdFromUrl(mod.Value.modThumb.url);
 
                 (_installState, _installedMatch) = InstalledMods.Compare(installed, modId, fileName, fileName);
@@ -498,6 +498,13 @@ namespace ModArchiveBrowser.Windows
             var collection = ChosenCollection();
             if (collection.HasValue)
                 plugin.penumbra.EnableComingInstalls(collection.Value);
+
+            //Sans cette note, le mod devient indiscernable une fois dans Penumbra : son meta.json
+            //ne porte que ce que l'auteur du modpack y a mis, et ce n'est presque jamais sa page
+            //XMA. Il ne serait donc jamais verifie pour une mise a jour.
+            var installedId = AvailabilityIndex.ModIdFromUrl(mod!.Value.modThumb.url);
+            if (installedId != null)
+                plugin.penumbra.NoteComingInstall(installedId);
 
             _isLoading = true;
             Task.Run(() =>

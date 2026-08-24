@@ -42,7 +42,15 @@ namespace ModArchiveBrowser.Utils
         private static readonly Regex VersionPattern =
             new(@"\b[vV]?(\d+(?:\.\d+)+)\b", RegexOptions.Compiled);
 
-        public static List<InstalledMod> Read(string modDirectory)
+        /// <param name="known">
+        /// Registre des mods installes par ce plugin, dossier vers identifiant XMA.
+        ///
+        /// Il prime sur le meta.json, car il est le seul a dire quelque chose de sur. Le champ
+        /// Website qu'on y lisait est rempli par l'auteur du modpack, qui y met ce qu'il veut :
+        /// son Ko-fi, son Patreon, rien du tout. Sur une bibliotheque reelle, aucun mod venu de
+        /// XMA ne portait l'adresse de XMA.
+        /// </param>
+        public static List<InstalledMod> Read(string modDirectory, IReadOnlyDictionary<string, string>? known = null)
         {
             var result = new List<InstalledMod>();
             if (string.IsNullOrEmpty(modDirectory) || !Directory.Exists(modDirectory))
@@ -63,12 +71,22 @@ namespace ModArchiveBrowser.Utils
                     var version = Text(root, "Version");
                     var website = Text(root, "Website");
 
-                    var match = XmaModIdPattern.Match(website);
-                    result.Add(new InstalledMod(
-                        Path.GetFileName(folder),
-                        name,
-                        version,
-                        match.Success ? match.Groups[1].Value : null));
+                    var directory = Path.GetFileName(folder);
+
+                    //Notre registre d'abord, le meta.json ensuite : le second ne renseigne
+                    //l'origine que si l'auteur a pense a y mettre sa page XMA, ce qui est rare.
+                    string? modId = null;
+                    if (known != null && known.TryGetValue(directory, out var recorded))
+                        modId = recorded;
+
+                    if (modId == null)
+                    {
+                        var match = XmaModIdPattern.Match(website);
+                        if (match.Success)
+                            modId = match.Groups[1].Value;
+                    }
+
+                    result.Add(new InstalledMod(directory, name, version, modId));
                 }
                 catch (Exception e)
                 {

@@ -20,10 +20,18 @@ namespace ModArchiveBrowser.Utils
     /// C'est le service qui manquait le plus. Heliosphere prévient ses utilisateurs quand un mod
     /// evolue ; sur XMA, personne ne l'est, et une bibliotheque vieillit sans qu'on le sache.
     ///
-    /// Le cout reste proportionnel a la bibliotheque installee, pas au catalogue : Penumbra
-    /// inscrit dans chaque meta.json l'adresse d'origine du mod, on sait donc lesquels viennent
-    /// de XMA et avec quel identifiant. Quelques dizaines de requetes, la ou indexer tout le site
-    /// en demanderait 52 000.
+    /// Le cout reste proportionnel a la bibliotheque installee, pas au catalogue : seuls les mods
+    /// dont on connait la page XMA sont interroges. Quelques dizaines de requetes, la ou indexer
+    /// tout le site en demanderait 96 000.
+    ///
+    /// Cette origine venait du champ Website du meta.json, et c'etait une erreur : ce champ
+    /// appartient a l'auteur du modpack, qui y met son Ko-fi, son Patreon, ou rien du tout.
+    /// Verifie sur une bibliotheque reelle — pas un seul mod venu de XMA n'y portait l'adresse de
+    /// XMA. L'onglet ne pouvait donc rien trouver, quel que soit le nombre de mises a jour
+    /// publiees, et son silence passait pour une bonne nouvelle.
+    ///
+    /// Le lien vient desormais du registre tenu a l'installation, ou le meta.json ne sert plus
+    /// que de secours pour les rares auteurs qui renseignent leur page.
     /// </summary>
     public sealed class UpdateChecker
     {
@@ -99,7 +107,7 @@ namespace ModArchiveBrowser.Utils
 
         private async Task RunAsync(CancellationToken token)
         {
-            var installed = InstalledMods.Read(_plugin.penumbra.GetModDirectory())
+            var installed = InstalledMods.Read(_plugin.penumbra.GetModDirectory(), _plugin.Configuration.InstalledFromXma)
                 .Where(m => !string.IsNullOrEmpty(m.XmaModId))
                 .ToList();
 

@@ -44,6 +44,19 @@ namespace ModArchiveBrowser.Interop.Penumbra
         private string? _pendingReplace;
         private DateTime _replaceUntil;
 
+        //Mod de XMA en cours d'installation. Vaut pour toute la fenetre, et c'est voulu : une
+        //archive peut donner plusieurs dossiers, qui viennent tous de la meme page.
+        private string? _pendingXmaId;
+        private DateTime _xmaIdUntil;
+
+        /// <summary>
+        /// Signale le dossier cree par Penumbra pour un mod venu de XMA.
+        ///
+        /// Porte l'identifiant du mod et le dossier qui vient d'apparaitre : c'est le seul instant
+        /// ou les deux sont connus ensemble.
+        /// </summary>
+        public event Action<string, string>? XmaModInstalled;
+
         private readonly IDisposable _initializedEvent;
         private readonly IDisposable _disposedEvent;
 
@@ -157,6 +170,19 @@ namespace ModArchiveBrowser.Interop.Penumbra
         }
 
         /// <summary>
+        /// Annonce de quel mod de XMA vient l'installation qui commence.
+        ///
+        /// Sans cela, un mod installe d'ici devient indiscernable des autres une fois dans
+        /// Penumbra : le meta.json ne porte que ce que l'auteur du modpack y a mis, et il y met
+        /// son Ko-fi ou son Patreon bien plus souvent que sa page XMA.
+        /// </summary>
+        public void NoteComingInstall(string xmaModId)
+        {
+            _pendingXmaId = xmaModId;
+            _xmaIdUntil = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+        }
+
+        /// <summary>
         /// Vrai tant qu'un remplacement attend le mod qui doit le declencher.
         ///
         /// Une mise a jour groupee doit les enchainer un par un : l'attente ne designe qu'un seul
@@ -212,6 +238,16 @@ namespace ModArchiveBrowser.Interop.Penumbra
 
         private void OnModAdded(string modDirectory)
         {
+            //Avant tout le reste : c'est le seul instant ou l'on sait de quelle page XMA vient ce
+            //dossier, et l'information sert bien apres, a chaque verification de mise a jour.
+            if (_pendingXmaId is { } xmaId)
+            {
+                if (DateTime.UtcNow <= _xmaIdUntil)
+                    XmaModInstalled?.Invoke(xmaId, modDirectory);
+                else
+                    _pendingXmaId = null;
+            }
+
             if (_pendingReplace is { } old)
             {
                 var expired = DateTime.UtcNow > _replaceUntil;
@@ -484,6 +520,7 @@ namespace ModArchiveBrowser.Interop.Penumbra
                 //elle supprimerait un mod sans rapport.
                 _pendingCollection = null;
                 _pendingReplace = null;
+                _pendingXmaId = null;
 
                 Available = false;
                 //_preSettingsTabBarDraw?.Dispose();

@@ -232,8 +232,15 @@ public class MainWindow : Window, IDisposable
         {
             ImGui.TextDisabled("Your installed mods have not been checked yet.");
             ImGui.Spacing();
-            ImGui.TextDisabled("Only mods installed from xivmodarchive can be checked:");
-            ImGui.TextDisabled("Penumbra records where each mod came from, and that is what this compares.");
+
+            //On dit d'ou vient la limite plutot que de laisser croire a une couverture complete :
+            //un mod installe avant cette version, ou par un autre moyen, ne peut pas etre
+            //rattache a sa page XMA, et son absence de la liste ne veut pas dire qu'il est a jour.
+            ImGui.TextDisabled("Only mods installed through this plugin can be checked: it records");
+            ImGui.TextDisabled("which xivmodarchive page each one came from.");
+            ImGui.Spacing();
+            ImGui.TextDisabled("Mods installed another way are not tracked. Reinstalling one from");
+            ImGui.TextDisabled("its page here is enough to pick it up.");
             return;
         }
 

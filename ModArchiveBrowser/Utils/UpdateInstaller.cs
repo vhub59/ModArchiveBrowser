@@ -161,6 +161,10 @@ namespace ModArchiveBrowser.Utils
             //peut arriver avant qu'InstallMod nous ait rendu la main.
             _plugin.penumbra.ReplaceComingInstall(update.Directory);
 
+            //Le nouveau dossier doit heriter du lien vers XMA, sans quoi le mod ne serait plus
+            //verifiable des la mise a jour suivante.
+            _plugin.penumbra.NoteComingInstall(update.ModId);
+
             var thumbnail = string.IsNullOrEmpty(facts.ThumbUrl)
                 ? string.Empty
                 : _plugin.imageHandler.GetImage(facts.ThumbUrl);

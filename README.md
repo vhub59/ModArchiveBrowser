@@ -32,8 +32,10 @@ This is a 3rd party plugin. If you are having problems with it, open an issue on
 - One-click install into Penumbra, with the button telling you what will actually happen:
   install, update, already installed, or not installable — and why
 - **Update checker**: compares your installed mods against what xivmodarchive publishes today.
-  Penumbra records where each mod came from, so the check costs one request per installed mod
-  rather than crawling the whole site
+  The plugin records which page each mod it installs came from, so the check costs one request
+  per installed mod rather than crawling the whole site. Mods installed some other way are not
+  tracked — a modpack's own metadata points at the author's Ko-fi or Patreon far more often than
+  at its archive page
 - **Update all**, replacing each mod in place rather than stacking versions: your settings and
   option choices are carried across every collection, and the old version is removed. Mods hosted
   elsewhere cannot be updated from here, and are listed by name instead of silently skipped

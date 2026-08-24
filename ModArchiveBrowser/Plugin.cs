@@ -11,6 +11,7 @@ using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Utility;
 using Dalamud.Game.Text.SeStringHandling;
 using System;
+using System.Linq;
 using ModArchiveBrowser.Utils;
 
 namespace ModArchiveBrowser;
@@ -47,6 +48,36 @@ public sealed class Plugin : IDalamudPlugin
     public ImageHandler imageHandler = null!;
     public ModHandler modHandler = null!;
 
+    /// <summary>
+    /// Retient de quelle page XMA vient un mod que Penumbra vient d'ajouter.
+    ///
+    /// C'est ce lien qui rend la verification des mises a jour possible. On le croyait lisible
+    /// dans le meta.json du mod, via son champ Website ; ce champ appartient a l'auteur du
+    /// modpack, qui y met son Ko-fi, son Patreon, ou rien. Verifie sur une bibliotheque reelle :
+    /// pas un seul mod n'y portait l'adresse de XMA, et l'onglet Updates ne pouvait donc rien
+    /// trouver, quel que soit le nombre de mises a jour publiees.
+    /// </summary>
+    private void RememberInstalledMod(string modId, string directory)
+    {
+        if (string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(modId))
+            return;
+
+        Configuration.InstalledFromXma[directory] = modId;
+
+        //Les dossiers disparus sont oublies au passage : un mod remplace par sa mise a jour, ou
+        //supprime a la main dans Penumbra, laisserait sinon une entree qui ne designe plus rien.
+        var root = penumbra.GetModDirectory();
+        if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
+        {
+            foreach (var stale in Configuration.InstalledFromXma.Keys
+                         .Where(d => !Directory.Exists(Path.Combine(root, d)))
+                         .ToList())
+                Configuration.InstalledFromXma.Remove(stale);
+        }
+
+        Configuration.Save();
+    }
+
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
@@ -70,6 +101,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(modWindow);
         WindowSystem.AddWindow(searchWindow);
         penumbra = new PenumbraService(PluginInterface,this);
+        penumbra.XmaModInstalled += RememberInstalledMod;
         updateChecker = new UpdateChecker(this);
         updateInstaller = new UpdateInstaller(this);
         prefetcher = new AvailabilityPrefetcher(this);
