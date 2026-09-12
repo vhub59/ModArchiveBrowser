@@ -36,7 +36,7 @@ namespace ModArchiveBrowser.Tests
         //droit de savoir qui l'interroge, et de nous bloquer si cela lui deplait.
         private static readonly HttpClient Client = new()
         {
-            DefaultRequestHeaders = { { "User-Agent", "ModArchiveBrowser/selector-check (+https://github.com/vhub59/ModArchiveBrowser)" } },
+            DefaultRequestHeaders = { { "User-Agent", "ModArchiveBrowser/selector-check (+https://github.com/E1f3n/ModArchiveBrowser)" } },
         };
 
         private static async Task<HtmlDocument> Fetch(string path)
