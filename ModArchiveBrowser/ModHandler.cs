@@ -79,20 +79,29 @@ namespace ModArchiveBrowser
 
         private void UpdateTextures()//Cant call TextureProvider in PenumbraAPI so need the textures to be ready in advance
         {
-            foreach(string mod in _modNameToThumbnail.Keys)
+            UpdateTextures(_modNameToThumbnail, _thumbnailToTextures,
+                path => Plugin.TextureProvider.GetFromFile(path));
+        }
+
+        //Le chargement est fourni separement pour tester le cache sans contexte graphique.
+        internal static void UpdateTextures<TTexture>(Dictionary<string, string> thumbnails,
+            Dictionary<string, TTexture> textures, Func<string, TTexture> loadTexture)
+        {
+            foreach (var (mod, path) in thumbnails.ToArray())
             {
-                if (!_thumbnailToTextures.ContainsKey(mod))
+                if (!textures.ContainsKey(mod))
                 {
-                    //file could be deleted from external source
-                    if(!File.Exists(_modNameToThumbnail[mod]))
+                    //Les vignettes sont temporaires : leur disparition ne doit pas bloquer
+                    //le demarrage du plugin ni provoquer la lecture d'une cle supprimee.
+                    if (!File.Exists(path))
                     {
-                        Plugin.ReportError("one of your downloaded mod had it's thumbnail deleted externally",null);
-                        Plugin.ReportError($"mod: {mod}, file not found: {_modNameToThumbnail[mod]}", null);
-                        _modNameToThumbnail.Remove(mod);
+                        Log.Debug($"Thumbnail no longer exists for {mod}: {path}");
+                        thumbnails.Remove(mod);
+                        continue;
                     }
-                    var tex = Plugin.TextureProvider.GetFromFile(_modNameToThumbnail[mod]);
-                    Plugin.Logger.Debug($"Tex updated for:{mod}");
-                    _thumbnailToTextures.Add(mod, tex);
+                    var tex = loadTexture(path);
+                    Log.Debug($"Tex updated for:{mod}");
+                    textures.Add(mod, tex);
                 }
             }
         }
