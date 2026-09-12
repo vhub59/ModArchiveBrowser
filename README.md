@@ -86,7 +86,7 @@ You need [Penumbra](https://github.com/xivdev/Penumbra) installed first.
 1. `/xlsettings` → **Experimental** tab
 2. Paste this into the custom plugin repositories list:
    ```
-   https://raw.githubusercontent.com/vhub59/ModArchiveBrowser/master/repo.json
+   https://raw.githubusercontent.com/E1f3n/ModArchiveBrowser/master/repo.json
    ```
 3. Click the **+** button, then **Save and Close**
 4. `/xlplugins` → search for **XIV Mod Archive Browser** → Install
